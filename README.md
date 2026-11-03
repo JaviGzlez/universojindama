@@ -1,0 +1,124 @@
+# Universo Jindama
+
+Plataforma de costes y escandallos para restaurantes: cada local introduce sus datos una vez y obtiene costes actualizados, explicables y trazables desde un mismo punto.
+
+**Fase 1 (esta versión):** organizaciones, restaurantes, usuarios y roles; materias primas con histórico de precios; equipos, tarifas de energía, impuestos, perfiles de personal y consumibles; motor de cálculo determinista y escandallo simulado; API `/api/v1`.
+
+Stack: Next.js 15 (App Router) · TypeScript · Tailwind CSS 4 · Supabase (Postgres, Auth, RLS) · Vercel.
+
+---
+
+## Puesta en marcha
+
+### 1. GitHub
+
+```bash
+cd universo-jindama
+git init
+git add .
+git commit -m "Universo Jindama · fase 1"
+git branch -M main
+git remote add origin https://github.com/JaviGzlez/universojindama.git
+git push -u origin main
+```
+
+### 2. Supabase
+
+1. Crea un proyecto en [supabase.com](https://supabase.com) (región UE, p. ej. Frankfurt o París).
+2. Abre **SQL Editor** y ejecuta, **en este orden**, el contenido de:
+   1. `supabase/migrations/20261103000001_acceso.sql`
+   2. `supabase/migrations/20261103000002_catalogos.sql`
+   3. `supabase/migrations/20261103000003_datos_iniciales.sql` (crea *Grupo Jindama* con Jindama, Jaleo y Juye Burger)
+
+   Si prefieres la CLI: `npx supabase init` (si pregunta, responde que no), luego `npx supabase link --project-ref TU_REF` y `npx supabase db push`.
+3. En **Project Settings → API** copia la *Project URL* y la *Publishable key* (o *anon key*).
+
+### 3. Vercel
+
+1. **Add New → Project** e importa el repo `universojindama`. Vercel detecta Next.js solo.
+2. En **Environment Variables** añade:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (o `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
+3. **Deploy**.
+
+### 4. Conectar autenticación
+
+En Supabase → **Authentication → URL Configuration**:
+
+- **Site URL:** `https://TU-DOMINIO.vercel.app`
+- **Redirect URLs:** `https://TU-DOMINIO.vercel.app/auth/callback` y, para desarrollo, `http://localhost:3000/auth/callback`
+
+### 5. Primer propietario
+
+1. Entra en `https://TU-DOMINIO.vercel.app/acceso` → **Crear cuenta** y confirma el correo.
+2. En el SQL Editor de Supabase:
+
+   ```sql
+   select public.grant_owner('tu@email.com', 'grupo-jindama');
+   ```
+
+3. Vuelve a `/panel`: verás los tres restaurantes.
+
+Para dar acceso a otra persona (después de que cree su cuenta):
+
+```sql
+-- rol de cocina solo en Jaleo
+insert into public.memberships (organization_id, restaurant_id, user_id, role)
+select r.organization_id, r.id, u.id, 'kitchen'
+from public.restaurants r, auth.users u
+where r.slug = 'jaleo' and u.email = 'persona@email.com';
+```
+
+Roles: `owner` (propietario), `admin`, `kitchen` (cocina), `purchasing` (compras), `accounting` (administración), `viewer` (consulta). Con `restaurant_id` nulo, el rol aplica a todos los restaurantes de la organización.
+
+---
+
+## Desarrollo local
+
+```bash
+npm install
+cp .env.example .env.local   # rellena las dos variables
+npm run dev                  # http://localhost:3000
+```
+
+| Comando | Qué hace |
+|---|---|
+| `npm test` | Pruebas del motor de cálculo (25) |
+| `npm run test:db` | Ejecuta las migraciones sobre Postgres embebido y prueba los permisos RLS (23) |
+| `npm run typecheck` / `npm run lint` | Tipos y estilo |
+| `npm run build` | Compilación de producción |
+
+El workflow `.github/workflows/ci.yml` ejecuta todo lo anterior en cada push.
+
+---
+
+## Estructura
+
+```
+supabase/migrations/      Esquema, RLS, auditoría y datos iniciales
+src/lib/engine/           Motor de cálculo (puro, sin BD ni IA) + tests
+src/lib/api/              Utilidades de la API (errores, paginación, If-Match)
+src/app/page.tsx          Portada
+src/app/acceso/           Login y registro
+src/app/panel/[rid]/      Panel por restaurante: inicio, escandallo, materias primas,
+                          equipos y consumibles, personal, energía e impuestos
+src/app/api/v1/           API REST
+docs/api.md               Referencia de la API
+```
+
+## Principios que respeta el código
+
+- **Un dato desconocido no es cero.** El motor devuelve `null` y lo lista en `missing_inputs`; el estado es `complete`, `estimated` o `incomplete`.
+- **Decimales exactos** (`decimal.js`); se redondea solo al mostrar.
+- **La autorización vive en la base de datos.** Cada tabla tiene RLS por organización, restaurante y rol; la interfaz solo refleja esos permisos.
+- **Histórico:** los precios son filas nuevas, nunca se reescriben; los catálogos se archivan, no se borran; los cambios sensibles quedan en `audit_events`.
+- **Concurrencia:** columna `version` en cada registro; la API exige `If-Match` para modificar.
+- **Guardado honesto:** la interfaz solo muestra «Guardado» cuando el servidor confirma la escritura.
+
+## Próximas fases
+
+2. Recetas y elaboraciones versionadas, escandallos guardados, simulaciones e histórico de costes (`cost_snapshots`).
+3. Proveedores, facturas (borrador → validada → registrada) con idempotencia y actualización automática de precios.
+4. Inventario, producción, ventas y desviaciones de consumo.
+5. Control económico, importación del Excel de analítica y conciliación.
+6. Extracción y asistencia IA sobre datos validados.

@@ -1,0 +1,131 @@
+@import "tailwindcss";
+
+@theme {
+  --color-crema: #faf7f2;
+  --color-crema-2: #f3eee6;
+  --color-tinta: #1d1d1f;
+  --color-grafito: #3a3a3c;
+  --color-niebla: #6e6e73;
+  --color-linea: #e6e0d6;
+  --color-musgo: #4f6b4a;
+  --color-musgo-claro: #e6ece2;
+  --color-terracota: #b5583a;
+  --color-terracota-claro: #f6e6de;
+  --color-ambar: #a8742a;
+  --color-ambar-claro: #f5ecdc;
+  --color-error: #b3261e;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "New York", "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--color-crema);
+  color: var(--color-tinta);
+  font-family: var(--font-sans);
+  font-feature-settings: "kern", "ss01";
+}
+
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-musgo) 70%, white);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+::selection {
+  background: var(--color-musgo-claro);
+}
+
+/* -------------------------------------------------------------------------
+   Mundos de la portada
+   ------------------------------------------------------------------------- */
+@keyframes flotar {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -14px, 0); }
+}
+@keyframes girar {
+  to { transform: rotate(360deg); }
+}
+@keyframes deriva {
+  to { background-position: 200% 50%; }
+}
+@keyframes aparecer {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+
+.mundo {
+  position: relative;
+  border-radius: 9999px;
+  overflow: hidden;
+  isolation: isolate;
+  box-shadow:
+    inset -18px -22px 48px rgba(0, 0, 0, 0.28),
+    inset 14px 12px 36px rgba(255, 255, 255, 0.22),
+    0 40px 60px -30px rgba(40, 30, 20, 0.45);
+}
+.mundo::before {
+  /* superficie mineral que se desliza lentamente */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-size: 200% 100%;
+  mix-blend-mode: soft-light;
+  opacity: 0.9;
+  animation: deriva 60s linear infinite;
+}
+.mundo::after {
+  /* textura granulada */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  mix-blend-mode: overlay;
+  opacity: 0.55;
+}
+
+.mundo-jindama {
+  background: radial-gradient(circle at 32% 28%, #b9c7ab 0%, #7d9570 32%, #4f6b4a 62%, #2c3d29 100%);
+}
+.mundo-jindama::before {
+  background-image: repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.16) 0 6%, transparent 6% 14%, rgba(30, 40, 25, 0.25) 14% 17%, transparent 17% 26%);
+}
+.mundo-jaleo {
+  background: radial-gradient(circle at 34% 30%, #f1c3a3 0%, #d98a62 30%, #b5583a 62%, #6e2d1b 100%);
+}
+.mundo-jaleo::before {
+  background-image: repeating-linear-gradient(80deg, rgba(255, 240, 225, 0.2) 0 4%, transparent 4% 11%, rgba(90, 30, 15, 0.22) 11% 13%, transparent 13% 22%);
+}
+.mundo-juye {
+  background: radial-gradient(circle at 34% 30%, #d9b37a 0%, #8e6a3e 30%, #4a3a2b 60%, #1c1714 100%);
+}
+.mundo-juye::before {
+  background-image: repeating-linear-gradient(150deg, rgba(255, 210, 140, 0.18) 0 5%, transparent 5% 12%, rgba(0, 0, 0, 0.3) 12% 15%, transparent 15% 24%);
+}
+
+.flotar-a { animation: flotar 7s ease-in-out infinite; }
+.flotar-b { animation: flotar 9.5s ease-in-out infinite; animation-delay: -3s; }
+.flotar-c { animation: flotar 12s ease-in-out infinite; animation-delay: -6s; }
+.girar-lento { animation: girar 140s linear infinite; }
+.girar-lento-inverso { animation: girar 200s linear infinite reverse; }
+.aparecer { animation: aparecer 900ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.select-chevron {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5l3 3 3-3' fill='none' stroke='%236e6e73' stroke-width='1.5'/></svg>");
+  background-position: right 0.9rem center;
+  background-repeat: no-repeat;
+}
