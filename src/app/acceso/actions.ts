@@ -1,6 +1,5 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -14,7 +13,7 @@ export interface EstadoAcceso {
 const Credenciales = z.object({
   email: z.string().trim().email("Introduce un correo válido."),
   password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres."),
-  modo: z.enum(["entrar", "registro"]),
+  modo: z.literal("entrar"),
   next: z.string().optional(),
 });
 
@@ -28,23 +27,8 @@ export async function acceder(_prev: EstadoAcceso, form: FormData): Promise<Esta
   }
   const parsed = Credenciales.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos no válidos." };
-  const { email, password, modo, next } = parsed.data;
+  const { email, password, next } = parsed.data;
   const supabase = await createClient();
-
-  if (modo === "registro") {
-    const h = await headers();
-    const origin = h.get("origin") ?? `https://${h.get("host")}`;
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { emailRedirectTo: `${origin}/auth/callback?next=/panel` },
-    });
-    if (error) return { error: traducir(error.message) };
-    if (!data.session) {
-      return { aviso: "Te hemos enviado un correo para confirmar la cuenta. Ábrelo desde este dispositivo y vuelve aquí." };
-    }
-    redirect("/panel");
-  }
 
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return { error: traducir(error.message) };

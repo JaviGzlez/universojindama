@@ -24,7 +24,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
     return (
       <Aviso titulo="Tu cuenta aún no tiene acceso">
         <p>
-          Has entrado como <strong>{ctx.user.email}</strong>, pero ningún propietario te ha asignado un restaurante.
+          Has entrado como <strong>{ctx.user.email}</strong>, pero todavía no tienes acceso a ningún restaurante. Pídeselo al administrador del grupo.
         </p>
         <p className="mt-4">
           Si eres el primer propietario, abre el editor SQL de Supabase y ejecuta:

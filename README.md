@@ -29,6 +29,7 @@ git push -u origin main
    1. `supabase/migrations/20261103000001_acceso.sql`
    2. `supabase/migrations/20261103000002_catalogos.sql`
    3. `supabase/migrations/20261103000003_datos_iniciales.sql` (crea *Grupo Jindama* con Jindama, Jaleo y Juye Burger)
+   4. `supabase/migrations/20261104000004_usuarios_actividad.sql` (nombres de usuario, actividad y gestión de accesos)
 
    Si prefieres la CLI: `npx supabase init` (si pregunta, responde que no), luego `npx supabase link --project-ref TU_REF` y `npx supabase db push`.
 3. En **Project Settings → API** copia la *Project URL* y la *Publishable key* (o *anon key*).
@@ -39,6 +40,7 @@ git push -u origin main
 2. En **Environment Variables** añade:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (o `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
+   - `SUPABASE_SECRET_KEY` — tipo **Secret**, solo servidor. Es la *secret key* (`sb_secret_…`) y se usa únicamente para crear usuarios y cambiar contraseñas desde el panel.
 3. **Deploy**.
 
 ### 4. Conectar autenticación
@@ -48,26 +50,22 @@ En Supabase → **Authentication → URL Configuration**:
 - **Site URL:** `https://TU-DOMINIO.vercel.app`
 - **Redirect URLs:** `https://TU-DOMINIO.vercel.app/auth/callback` y, para desarrollo, `http://localhost:3000/auth/callback`
 
-### 5. Primer propietario
+### 5. Primer propietario y equipo
 
-1. Entra en `https://TU-DOMINIO.vercel.app/acceso` → **Crear cuenta** y confirma el correo.
-2. En el SQL Editor de Supabase:
+No hay registro público: las cuentas las crea el propietario.
+
+1. En Supabase → **Authentication → Users → Add user → Create new user**, crea tu cuenta con correo y contraseña y marca **Auto Confirm User**.
+2. En el SQL Editor:
 
    ```sql
    select public.grant_owner('tu@email.com', 'grupo-jindama');
+   update public.profiles set display_name = 'Javi' where email = 'tu@email.com';
    ```
 
-3. Vuelve a `/panel`: verás los tres restaurantes.
+3. Entra en `/acceso`. En **Usuarios** crea al resto del equipo (nombre, correo, contraseña, rol y restaurantes). Desde ahí también cambias contraseñas o retiras accesos.
+4. Recomendado: en Supabase → **Authentication → Sign In / Providers**, desactiva **Allow new users to sign up**. El panel sigue pudiendo crear usuarios.
 
-Para dar acceso a otra persona (después de que cree su cuenta):
-
-```sql
--- rol de cocina solo en Jaleo
-insert into public.memberships (organization_id, restaurant_id, user_id, role)
-select r.organization_id, r.id, u.id, 'kitchen'
-from public.restaurants r, auth.users u
-where r.slug = 'jaleo' and u.email = 'persona@email.com';
-```
+**Actividad:** todos los miembros ven lo que se hace en los restaurantes a los que tienen acceso (quién, qué y cuándo), en el apartado *Actividad* y en el Inicio.
 
 Roles: `owner` (propietario), `admin`, `kitchen` (cocina), `purchasing` (compras), `accounting` (administración), `viewer` (consulta). Con `restaurant_id` nulo, el rol aplica a todos los restaurantes de la organización.
 
@@ -83,8 +81,8 @@ npm run dev                  # http://localhost:3000
 
 | Comando | Qué hace |
 |---|---|
-| `npm test` | Pruebas del motor de cálculo (25) |
-| `npm run test:db` | Ejecuta las migraciones sobre Postgres embebido y prueba los permisos RLS (23) |
+| `npm test` | Pruebas del motor de cálculo y de la actividad (26) |
+| `npm run test:db` | Ejecuta las migraciones sobre Postgres embebido y prueba los permisos RLS |
 | `npm run typecheck` / `npm run lint` | Tipos y estilo |
 | `npm run build` | Compilación de producción |
 

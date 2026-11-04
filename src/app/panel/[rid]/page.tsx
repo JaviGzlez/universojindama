@@ -4,18 +4,21 @@ import { Mundo, mundoDeSlug } from "@/components/mundo";
 import { Insignia, Tarjeta } from "@/components/ui";
 import { getRestaurante } from "@/lib/contexto";
 import { cargarEquipos, cargarImpuestos, cargarIngredientes, cargarPerfiles, cargarTarifas } from "@/lib/datos";
+import { cargarActividad } from "@/lib/actividad";
+import { ListaActividad } from "@/components/lista-actividad";
 
 export default async function Inicio({ params }: { params: Promise<{ rid: string }> }) {
   const { rid } = await params;
   const r = await getRestaurante(rid);
   if (!r) notFound();
   const { ctx, restaurante } = r;
-  const [ings, equipos, perfiles, tarifas, impuestos] = await Promise.all([
+  const [ings, equipos, perfiles, tarifas, impuestos, actividad] = await Promise.all([
     cargarIngredientes(ctx.supabase, rid, restaurante.organization_id),
     cargarEquipos(ctx.supabase, rid),
     cargarPerfiles(ctx.supabase, rid),
     cargarTarifas(ctx.supabase, rid),
     cargarImpuestos(ctx.supabase, rid),
+    cargarActividad(ctx.supabase, { restaurantes: ctx.restaurants, restauranteId: rid, limite: 6 }),
   ]);
   const conPrecio = ings.filter((i) => i.precio).length;
   const base = `/panel/${rid}`;
@@ -34,7 +37,7 @@ export default async function Inicio({ params }: { params: Promise<{ rid: string
       <div className="flex flex-col items-start gap-6 md:flex-row md:items-center">
         <Mundo id={mundoDeSlug(restaurante.slug)} size={84} />
         <div>
-          <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-niebla">Centro de control</p>
+          <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-niebla">Hola, {ctx.nombre.split(" ")[0]}</p>
           <h1 className="mt-1 text-[40px] font-semibold leading-tight tracking-[-0.03em] md:text-[48px]">{restaurante.name}</h1>
         </div>
       </div>
@@ -76,6 +79,18 @@ export default async function Inicio({ params }: { params: Promise<{ rid: string
           </Link>
         </Tarjeta>
       </div>
+
+      <section className="mt-10" aria-labelledby="act-t">
+        <div className="mb-4 flex items-baseline justify-between">
+          <h2 id="act-t" className="text-[24px] font-semibold tracking-[-0.02em]">Actividad reciente</h2>
+          <Link href={`${base}/actividad`} className="text-[14px] font-medium text-musgo hover:underline">Ver toda</Link>
+        </div>
+        {actividad.items.length === 0 ? (
+          <p className="rounded-[22px] border border-dashed border-linea px-6 py-8 text-center text-[14px] text-niebla">Todavía no hay actividad en {restaurante.name}.</p>
+        ) : (
+          <ListaActividad items={actividad.items} tz={restaurante.timezone} agruparPorDia={false} mostrarRestaurante={false} />
+        )}
+      </section>
 
       <p className="mt-10 flex flex-wrap items-center gap-2 text-[13px] text-niebla">
         <Insignia>Fase 1</Insignia> Recetas guardadas, compras, inventario, ventas y control económico llegan en las siguientes fases.

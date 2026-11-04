@@ -10,7 +10,7 @@ const db = new PGlite();
 await db.exec(`
   create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
   create schema auth;
-  create table auth.users (id uuid primary key, email text);
+  create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}'::jsonb);
   create function auth.uid() returns uuid language sql stable as $$
     select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
   grant usage on schema auth to anon, authenticated;
@@ -30,7 +30,9 @@ await db.exec(`
 const A = '00000000-0000-0000-0000-00000000000a';
 const B = '00000000-0000-0000-0000-00000000000b';
 const C = '00000000-0000-0000-0000-00000000000c';
-await db.exec(`insert into auth.users values ('${A}','a@x.com'),('${B}','b@x.com'),('${C}','c@x.com')`);
+await db.exec(`insert into auth.users (id, email, raw_user_meta_data) values ('${A}','a@x.com','{"display_name":"Javi"}'),('${B}','b@x.com','{"display_name":"María"}'),('${C}','c@x.com','{}')`);
+// la migración 4 debe poder repetirse
+await db.exec(fs.readFileSync(path.join(dir, fs.readdirSync(dir).sort().at(-1)), 'utf8'));
 console.log((await db.query(`select public.grant_owner('A@x.com','grupo-jindama') r`)).rows[0].r);
 const jaleo = (await db.query(`select id, organization_id from restaurants where slug='jaleo'`)).rows[0];
 const jindama = (await db.query(`select id from restaurants where slug='jindama'`)).rows[0];
@@ -47,6 +49,10 @@ async function tryQ(sql) {
   try { await db.exec('savepoint s'); const r = await db.query(sql); await db.exec('release savepoint s'); return { ok: true, r }; }
   catch (e) { await db.exec('rollback to savepoint s'); return { ok: false, e: e.message }; }
 }
+
+console.log('Perfiles');
+check('perfil creado con nombre', (await db.query(`select display_name from profiles where user_id='${A}'`)).rows[0]?.display_name === 'Javi');
+check('perfil sin nombre usa el correo', (await db.query(`select display_name from profiles where user_id='${C}'`)).rows[0]?.display_name === 'c');
 
 console.log('Propietario (A)');
 await as(A, async () => {
@@ -66,7 +72,20 @@ await as(A, async () => {
   check('no puede llamar grant_owner', !(await tryQ(`select public.grant_owner('c@x.com','grupo-jindama')`)).ok);
   const shared = await tryQ(`insert into ingredients (organization_id, name, base_unit) values ('${jaleo.organization_id}','Sal','g')`);
   check('crea ingrediente compartido', shared.ok);
+  check('asigna acceso a C en Jindama', (await tryQ(`select public.set_member_access('${jaleo.organization_id}','${C}','viewer',array['${jindama.id}']::uuid[])`)).ok);
+  check('C queda con 1 acceso', (await db.query(`select * from memberships where user_id='${C}'`)).rows.length === 1);
+  check('cambia a todo el grupo', (await tryQ(`select public.set_member_access('${jaleo.organization_id}','${C}','kitchen',null)`)).ok
+    && (await db.query(`select restaurant_id from memberships where user_id='${C}'`)).rows[0].restaurant_id === null);
+  check('no puede asignar propietario', !(await tryQ(`select public.set_member_access('${jaleo.organization_id}','${C}','owner',null)`)).ok);
+  check('no se cambia a sí mismo', !(await tryQ(`select public.set_member_access('${jaleo.organization_id}','${A}','viewer',null)`)).ok);
+  check('quita acceso', (await tryQ(`select public.remove_member('${jaleo.organization_id}','${C}')`)).ok
+    && (await db.query(`select * from memberships where user_id='${C}'`)).rows.length === 0);
+  check('cambia el nombre de un miembro', (await db.query(`update profiles set display_name='María G.' where user_id='${B}' returning 1`)).rows.length === 1);
 });
+
+// actividad persistente en Jindama (como A, confirmada)
+await db.exec(`begin; set local role authenticated; select set_config('request.jwt.claim.sub', '${A}', true);
+  insert into equipment (restaurant_id, name) values ('${jindama.id}','Freidora'); commit;`);
 
 console.log('Cocina en Jaleo (B)');
 await as(B, async () => {
@@ -79,7 +98,14 @@ await as(B, async () => {
   check('no crea en Jindama', !(await tryQ(`insert into ingredients (organization_id, restaurant_id, name, base_unit) values ('${jaleo.organization_id}','${jindama.id}','X','g')`)).ok);
   check('no crea precio en Jindama', !(await tryQ(`insert into ingredient_prices (restaurant_id, ingredient_id, price_per_base_unit) values ('${jindama.id}','${i.r.rows[0].id}',1)`)).ok);
   check('no crea impuestos (rol administración)', !(await tryQ(`insert into tax_rates (restaurant_id, name, kind, rate) values ('${jaleo.id}','IVA','sale',0.1)`)).ok);
-  check('no ve auditoría', (await db.query('select * from audit_events')).rows.length === 0);
+  const act = (await db.query('select restaurant_id, table_name from audit_events')).rows;
+  check('ve actividad de Jaleo', act.some((r) => r.restaurant_id === jaleo.id));
+  check('no ve actividad de Jindama', !act.some((r) => r.restaurant_id === jindama.id));
+  check('ve el nombre de Javi', (await db.query(`select display_name from profiles where user_id='${A}'`)).rows.length === 1);
+  check('no ve el perfil de C', (await db.query(`select * from profiles where user_id='${C}'`)).rows.length === 0);
+  check('no cambia el nombre de Javi', (await db.query(`update profiles set display_name='X' where user_id='${A}' returning 1`)).rows.length === 0);
+  check('no gestiona accesos', !(await tryQ(`select public.set_member_access('${jaleo.organization_id}','${C}','viewer',null)`)).ok);
+  check('cambia su propio nombre', (await db.query(`update profiles set display_name='Mari' where user_id='${B}' returning 1`)).rows.length === 1);
   check('no puede darse rol', !(await tryQ(`insert into memberships (organization_id, user_id, role) values ('${jaleo.organization_id}','${B}','owner')`)).ok);
   const upd = await db.query(`update restaurants set name='Hack' where slug='jindama' returning id`);
   check('no modifica Jindama', upd.rows.length === 0);
@@ -89,6 +115,7 @@ console.log('Sin pertenencia (C)');
 await as(C, async () => {
   check('no ve restaurantes', (await db.query('select * from restaurants')).rows.length === 0);
   check('no ve organizaciones', (await db.query('select * from organizations')).rows.length === 0);
+  check('no ve actividad', (await db.query('select * from audit_events')).rows.length === 0);
   check('no ve ingredientes', (await db.query('select * from ingredients')).rows.length === 0);
 });
 

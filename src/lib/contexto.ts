@@ -48,10 +48,11 @@ export const getContexto = cache(async () => {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return null;
 
-  const [{ data: memberships }, { data: restaurants }, { data: organizations }] = await Promise.all([
+  const [{ data: memberships }, { data: restaurants }, { data: organizations }, { data: perfil }] = await Promise.all([
     supabase.from("memberships").select("organization_id, restaurant_id, role").eq("user_id", auth.user.id),
     supabase.from("restaurants").select("id, organization_id, name, slug, currency, timezone").eq("status", "active").order("name"),
     supabase.from("organizations").select("id, name, slug").order("name"),
+    supabase.from("profiles").select("display_name").eq("user_id", auth.user.id).maybeSingle(),
   ]);
 
   const memb = (memberships ?? []) as Membresia[];
@@ -70,6 +71,7 @@ export const getContexto = cache(async () => {
   return {
     supabase,
     user: auth.user,
+    nombre: (perfil?.display_name as string | undefined) ?? auth.user.email ?? "",
     restaurants: rests,
     organizations: organizations ?? [],
     roles,

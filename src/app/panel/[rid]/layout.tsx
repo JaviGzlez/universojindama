@@ -23,7 +23,7 @@ export default async function RestauranteLayout({ children, params }: { children
           </div>
           <Navegacion rid={rid} />
           <div className="mt-auto hidden border-t border-linea px-5 py-4 lg:block">
-            <p className="truncate text-[13px] font-medium">{ctx.user.email}</p>
+            <p className="truncate text-[13px] font-medium">{ctx.nombre}</p>
             <p className="text-[12px] text-niebla">{roles.join(" · ") || "Sin rol"}</p>
             <form action={salir} className="mt-2">
               <button className="text-[12px] font-medium text-niebla hover:text-tinta">Cerrar sesión</button>

@@ -10,6 +10,7 @@ const SECCIONES: { titulo: string; items: { nombre: string; ruta?: string }[] }[
     items: [
       { nombre: "Inicio", ruta: "" },
       { nombre: "Escandallo", ruta: "/escandallo" },
+      { nombre: "Actividad", ruta: "/actividad" },
     ],
   },
   {
@@ -20,6 +21,10 @@ const SECCIONES: { titulo: string; items: { nombre: string; ruta?: string }[] }[
       { nombre: "Personal", ruta: "/personal" },
       { nombre: "Energía e impuestos", ruta: "/ajustes" },
     ],
+  },
+  {
+    titulo: "Equipo",
+    items: [{ nombre: "Usuarios", ruta: "/usuarios" }],
   },
   {
     titulo: "Próximamente",
