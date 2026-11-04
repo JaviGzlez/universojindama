@@ -1,60 +1,97 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AccionRapida } from "@/components/formulario-accion";
+import { COLOR_SERIE } from "@/components/graficos";
+import { ListaActividad } from "@/components/lista-actividad";
 import { Mundo, mundoDeSlug } from "@/components/mundo";
-import { Insignia, Tarjeta } from "@/components/ui";
+import { Tarjeta } from "@/components/ui";
+import { cargarActividad } from "@/lib/actividad";
 import { getRestaurante } from "@/lib/contexto";
 import { cargarEquipos, cargarImpuestos, cargarIngredientes, cargarPerfiles, cargarTarifas } from "@/lib/datos";
-import { cargarActividad } from "@/lib/actividad";
-import { ListaActividad } from "@/components/lista-actividad";
+import { resumenPorRestaurante } from "@/lib/economia";
+import { resolverAviso } from "./actions";
+import { ResumenRestaurante } from "./resumen";
 
 export default async function Inicio({ params }: { params: Promise<{ rid: string }> }) {
   const { rid } = await params;
   const r = await getRestaurante(rid);
   if (!r) notFound();
   const { ctx, restaurante } = r;
-  const [ings, equipos, perfiles, tarifas, impuestos, actividad] = await Promise.all([
-    cargarIngredientes(ctx.supabase, rid, restaurante.organization_id),
-    cargarEquipos(ctx.supabase, rid),
-    cargarPerfiles(ctx.supabase, rid),
-    cargarTarifas(ctx.supabase, rid),
-    cargarImpuestos(ctx.supabase, rid),
-    cargarActividad(ctx.supabase, { restaurantes: ctx.restaurants, restauranteId: rid, limite: 6 }),
+  const sb = ctx.supabase;
+  const anio = new Date().getUTCFullYear();
+  const hasta = new Date(Date.UTC(anio, new Date().getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
+
+  const [ings, equipos, perfiles, tarifas, impuestos, actividad, resumen, { data: avisos }, { count: nRecetas }, { count: nCarta }] = await Promise.all([
+    cargarIngredientes(sb, rid, restaurante.organization_id),
+    cargarEquipos(sb, rid),
+    cargarPerfiles(sb, rid),
+    cargarTarifas(sb, rid),
+    cargarImpuestos(sb, rid),
+    cargarActividad(sb, { restaurantes: ctx.restaurants, restauranteId: rid, limite: 10 }),
+    resumenPorRestaurante(sb, [rid], `${anio}-01-01`, hasta),
+    sb.from("alerts").select("id, title, body, severity, created_at").eq("restaurant_id", rid).is("resolved_at", null).order("created_at", { ascending: false }).limit(6),
+    sb.from("recipes").select("id", { count: "exact", head: true }).eq("restaurant_id", rid).eq("status", "active"),
+    sb.from("menu_items").select("id", { count: "exact", head: true }).eq("restaurant_id", rid).eq("status", "active"),
   ]);
   const conPrecio = ings.filter((i) => i.precio).length;
   const base = `/panel/${rid}`;
+  const mundo = mundoDeSlug(restaurante.slug);
 
   const pasos = [
     { titulo: "Tarifa de electricidad", hecho: tarifas.some((t) => t.source === "electricity"), detalle: `${tarifas.length} tarifas`, href: `${base}/ajustes` },
     { titulo: "Impuesto de venta", hecho: impuestos.some((t) => t.kind === "sale"), detalle: `${impuestos.length} impuestos`, href: `${base}/ajustes` },
     { titulo: "Perfiles de personal", hecho: perfiles.length > 0, detalle: `${perfiles.length} perfiles`, href: `${base}/personal` },
     { titulo: "Equipos con tarifa", hecho: equipos.some((e) => e.energy_tariff_id), detalle: `${equipos.length} equipos`, href: `${base}/equipos` },
-    { titulo: "Materias primas con precio", hecho: conPrecio > 0, detalle: `${conPrecio} de ${ings.length} con precio`, href: `${base}/ingredientes` },
+    { titulo: "Materias primas con precio", hecho: conPrecio > 0, detalle: `${conPrecio} de ${ings.length}`, href: `${base}/ingredientes` },
+    { titulo: "Recetas activas", hecho: (nRecetas ?? 0) > 0, detalle: `${nRecetas ?? 0} recetas`, href: `${base}/recetas` },
+    { titulo: "Carta con precios", hecho: (nCarta ?? 0) > 0, detalle: `${nCarta ?? 0} platos`, href: `${base}/carta` },
   ];
   const completados = pasos.filter((p) => p.hecho).length;
+  const puedeResolver = ["kitchen", "purchasing", "accounting", "admin", "owner"].some((x) => ctx.roles(restaurante).includes(x as never));
 
   return (
     <>
       <div className="flex flex-col items-start gap-6 md:flex-row md:items-center">
-        <Mundo id={mundoDeSlug(restaurante.slug)} size={84} />
+        <Mundo id={mundo} size={84} />
         <div>
           <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-niebla">Hola, {ctx.nombre.split(" ")[0]}</p>
           <h1 className="mt-1 text-[40px] font-semibold leading-tight tracking-[-0.03em] md:text-[48px]">{restaurante.name}</h1>
         </div>
       </div>
 
-      <div className="mt-10 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+      {(avisos?.length ?? 0) > 0 && (
+        <section className="mt-8 space-y-2" aria-label="Avisos">
+          {avisos!.map((a) => (
+            <div key={a.id} className={`flex flex-col gap-2 rounded-2xl px-5 py-4 sm:flex-row sm:items-center sm:justify-between ${a.severity === "critical" ? "bg-terracota-claro" : "bg-ambar-claro"}`}>
+              <div>
+                <p className={`text-[14px] font-semibold ${a.severity === "critical" ? "text-terracota" : "text-ambar"}`}>
+                  <span aria-hidden="true">▲ </span>{a.title}
+                </p>
+                {a.body && <p className="text-[13px] text-grafito">{a.body}</p>}
+              </div>
+              {puedeResolver && <AccionRapida action={resolverAviso} etiqueta="Entendido" campos={{ restaurant_id: rid, id: a.id }} />}
+            </div>
+          ))}
+        </section>
+      )}
+
+      <div className="mt-8">
+        <ResumenRestaurante meses={resumen.get(rid) ?? []} color={COLOR_SERIE[mundo]} />
+      </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <Tarjeta>
           <div className="flex items-baseline justify-between">
-            <h2 className="text-[19px] font-semibold tracking-[-0.01em]">Configuración inicial</h2>
+            <h2 className="text-[19px] font-semibold tracking-[-0.01em]">Configuración</h2>
             <span className="text-[13px] text-niebla">{completados} de {pasos.length}</span>
           </div>
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-crema-2" role="progressbar" aria-valuemin={0} aria-valuemax={pasos.length} aria-valuenow={completados}>
             <div className="h-full rounded-full bg-musgo transition-all" style={{ width: `${(completados / pasos.length) * 100}%` }} />
           </div>
-          <ul className="mt-6 divide-y divide-linea/70">
+          <ul className="mt-5 divide-y divide-linea/70">
             {pasos.map((p) => (
               <li key={p.titulo}>
-                <Link href={p.href} className="flex items-center justify-between gap-4 py-3.5 hover:opacity-80">
+                <Link href={p.href} className="flex items-center justify-between gap-4 py-3 hover:opacity-80">
                   <span className="flex items-center gap-3">
                     <span aria-hidden="true" className={`flex h-6 w-6 items-center justify-center rounded-full text-[12px] ${p.hecho ? "bg-musgo text-white" : "border border-linea text-niebla"}`}>
                       {p.hecho ? "✓" : ""}
@@ -68,19 +105,23 @@ export default async function Inicio({ params }: { params: Promise<{ rid: string
           </ul>
         </Tarjeta>
 
-        <Tarjeta className="flex flex-col bg-tinta text-crema ring-0">
-          <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-crema/60">Escandallo</p>
-          <h2 className="mt-2 text-[28px] font-semibold leading-tight tracking-[-0.02em]">Calcula un plato con tus datos reales.</h2>
-          <p className="mt-3 text-[14px] leading-relaxed text-crema/70">
-            Materia prima, energía, personal y consumibles, con su desglose. Lo que falte aparece como pendiente, nunca como cero.
-          </p>
-          <Link href={`${base}/escandallo`} className="mt-auto inline-flex h-11 w-fit items-center rounded-full bg-crema px-5 pt-0 text-[14px] font-medium text-tinta hover:bg-white">
-            Abrir escandallo
-          </Link>
-        </Tarjeta>
+        <div className="grid gap-4">
+          {[
+            { t: "Recetas", d: "Escandallos guardados con versiones e histórico de costes.", h: `${base}/recetas` },
+            { t: "Facturas", d: "Registra compras: actualizan precios, inventario y escandallos.", h: `${base}/compras` },
+            { t: "Resultados", d: "Ingresos, compras, personal y gastos por mes.", h: `${base}/economia` },
+          ].map((x) => (
+            <Link key={x.t} href={x.h} className="group rounded-[22px] bg-white p-5 ring-1 ring-linea transition hover:-translate-y-0.5">
+              <p className="flex items-center justify-between text-[16px] font-semibold">
+                {x.t} <span className="text-niebla transition group-hover:translate-x-1 group-hover:text-tinta" aria-hidden="true">→</span>
+              </p>
+              <p className="mt-1 text-[13px] text-niebla">{x.d}</p>
+            </Link>
+          ))}
+        </div>
       </div>
 
-      <section className="mt-10" aria-labelledby="act-t">
+      <section className="mt-14" aria-labelledby="act-t">
         <div className="mb-4 flex items-baseline justify-between">
           <h2 id="act-t" className="text-[24px] font-semibold tracking-[-0.02em]">Actividad reciente</h2>
           <Link href={`${base}/actividad`} className="text-[14px] font-medium text-musgo hover:underline">Ver toda</Link>
@@ -91,10 +132,6 @@ export default async function Inicio({ params }: { params: Promise<{ rid: string
           <ListaActividad items={actividad.items} tz={restaurante.timezone} agruparPorDia={false} mostrarRestaurante={false} />
         )}
       </section>
-
-      <p className="mt-10 flex flex-wrap items-center gap-2 text-[13px] text-niebla">
-        <Insignia>Fase 1</Insignia> Recetas guardadas, compras, inventario, ventas y control económico llegan en las siguientes fases.
-      </p>
     </>
   );
 }

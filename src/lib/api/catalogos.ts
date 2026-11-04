@@ -98,6 +98,49 @@ export const CATALOGOS = {
       rule: z.string().max(500).nullable().optional(),
     }).strict(),
   },
+  suppliers: {
+    tabla: "suppliers",
+    columnas: "id, restaurant_id, name, tax_id, contact, phone, email, notes, status, created_at, updated_at, version",
+    incluyeCompartidos: false,
+    crear: z.object({
+      name: z.string().trim().min(1).max(120), tax_id: z.string().max(40).nullable().optional(),
+      contact: z.string().max(120).nullable().optional(), phone: z.string().max(40).nullable().optional(),
+      email: z.string().max(120).nullable().optional(), notes: z.string().max(500).nullable().optional(),
+    }).strict(),
+  },
+  "supplier-products": {
+    tabla: "supplier_products",
+    columnas: "id, restaurant_id, supplier_id, ingredient_id, reference, brand, description, pack_quantity, pack_unit, last_price, last_price_date, status, created_at, updated_at, version",
+    incluyeCompartidos: false,
+    crear: z.object({
+      supplier_id: z.string().uuid(), ingredient_id: z.string().uuid(), description: z.string().trim().min(1).max(120),
+      reference: z.string().max(60).nullable().optional(), brand: z.string().max(60).nullable().optional(),
+      pack_quantity: decimalStr, pack_unit: z.enum(["g", "kg", "ml", "l", "unit"]), last_price: decimalOpt,
+    }).strict(),
+  },
+  "sales-channels": {
+    tabla: "sales_channels",
+    columnas: "id, restaurant_id, name, kind, commission_pct, commission_base, fixed_fee_per_order, portions_per_order, packaging_per_portion, valid_from, notes, status, created_at, updated_at, version",
+    incluyeCompartidos: false,
+    crear: z.object({
+      name: z.string().trim().min(1).max(60), kind: z.enum(["dine_in", "takeaway", "own_delivery", "platform"]),
+      commission_pct: decimalStr.default("0"), commission_base: z.enum(["net", "gross"]).default("net"),
+      fixed_fee_per_order: decimalStr.default("0"), portions_per_order: decimalStr.default("1"), packaging_per_portion: decimalStr.default("0"),
+      notes: z.string().max(300).nullable().optional(),
+    }).strict(),
+  },
+  "menu-items": {
+    tabla: "menu_items",
+    columnas: "id, restaurant_id, name, category, recipe_id, status, created_at, updated_at, version",
+    incluyeCompartidos: false,
+    crear: z.object({ name: z.string().trim().min(1).max(120), category: z.string().max(60).nullable().optional(), recipe_id: z.string().uuid().nullable().optional() }).strict(),
+  },
+  recipes: {
+    tabla: "recipes",
+    columnas: "id, restaurant_id, name, kind, category, active_version_id, status, created_at, updated_at, version",
+    incluyeCompartidos: false,
+    crear: z.object({ name: z.string().trim().min(1).max(120), kind: z.enum(["dish", "preparation"]), category: z.string().max(60).nullable().optional() }).strict(),
+  },
 } as const;
 
 export type RecursoCatalogo = keyof typeof CATALOGOS;

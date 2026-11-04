@@ -224,7 +224,7 @@ const ESTADO = {
 const CALIDAD = { measured: "real", manufacturer: "fabricante", estimated: "estimado" } as const;
 const GRUPO = { ingredients: "Materia prima", energy: "Energía", labor: "Personal", consumables: "Consumibles", overheads: "Gastos generales", channel: "Canal" } as const;
 
-function Resultado({ res, decimales }: { res: CalculationResult; decimales: number }) {
+export function Resultado({ res, decimales }: { res: CalculationResult; decimales: number }) {
   const e = ESTADO[res.status];
   const total = res.costs.total_per_portion ?? res.costs.direct_per_portion;
   const p = res.profitability;
@@ -333,7 +333,7 @@ function Pct({ k, v }: { k: string; v: string | null }) {
 }
 
 // ------------------------------------------------------------------- piezas UI
-function Bloque({ titulo, children, onAdd, vacio }: { titulo: string; children?: React.ReactNode; onAdd?: () => void; vacio?: string }) {
+export function Bloque({ titulo, children, onAdd, vacio }: { titulo: string; children?: React.ReactNode; onAdd?: () => void; vacio?: string }) {
   return (
     <section className="rounded-[22px] bg-white p-6 ring-1 ring-linea">
       <div className="flex items-center justify-between">
@@ -349,23 +349,23 @@ function Bloque({ titulo, children, onAdd, vacio }: { titulo: string; children?:
   );
 }
 
-function Fila({ children, onRemove, cols = "lg:grid-cols-4" }: { children: React.ReactNode; onRemove: () => void; cols?: string }) {
+export function Fila({ children, onRemove, cols = "lg:grid-cols-4" }: { children: React.ReactNode; onRemove?: () => void; cols?: string }) {
   return (
     <div className={`relative grid gap-3 rounded-2xl bg-crema/70 p-4 pr-12 sm:grid-cols-2 ${cols}`}>
       {children}
-      <button type="button" onClick={onRemove} aria-label="Quitar" className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full text-niebla hover:bg-white hover:text-tinta">
+      {onRemove && <button type="button" onClick={onRemove} aria-label="Quitar" className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full text-niebla hover:bg-white hover:text-tinta">
         ×
-      </button>
+      </button>}
     </div>
   );
 }
 
-function Num({ label, value, onChange, unidad, ayuda }: { label: string; value: string; onChange: (v: string) => void; unidad?: string; ayuda?: string }) {
+export function Num({ label, value, onChange, unidad, ayuda, disabled }: { label: string; value: string; onChange: (v: string) => void; unidad?: string; ayuda?: string; disabled?: boolean }) {
   return (
     <label className="block">
       <span className="mb-1.5 block text-[12px] font-medium text-grafito">{label}</span>
       <span className="relative block">
-        <input inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} className={`${claseInput} ${unidad ? "pr-14" : ""}`} />
+        <input inputMode="decimal" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={`${claseInput} ${unidad ? "pr-14" : ""}`} />
         {unidad && <span className="pointer-events-none absolute inset-y-0 right-3.5 flex items-center text-[13px] text-niebla">{unidad}</span>}
       </span>
       {ayuda && <span className="mt-1 block text-[11.5px] leading-snug text-niebla">{ayuda}</span>}
@@ -373,7 +373,7 @@ function Num({ label, value, onChange, unidad, ayuda }: { label: string; value: 
   );
 }
 
-function Txt({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+export function Txt({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <label className="block">
       <span className="mb-1.5 block text-[12px] font-medium text-grafito">{label}</span>
@@ -382,11 +382,11 @@ function Txt({ label, value, onChange }: { label: string; value: string; onChang
   );
 }
 
-function Sel({ label, value, onChange, children, className = "" }: { label: string; value: string; onChange: (v: string) => void; children: React.ReactNode; className?: string }) {
+export function Sel({ label, value, onChange, children, className = "", disabled }: { label: string; value: string; onChange: (v: string) => void; children: React.ReactNode; className?: string; disabled?: boolean }) {
   return (
     <label className={`block ${className}`}>
       <span className="mb-1.5 block text-[12px] font-medium text-grafito">{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={`${claseInput} select-chevron appearance-none pr-9`}>
+      <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={`${claseInput} select-chevron appearance-none pr-9`}>
         {children}
       </select>
     </label>

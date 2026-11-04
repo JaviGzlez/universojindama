@@ -5,7 +5,7 @@ import { getRestaurante } from "@/lib/contexto";
 import { cargarAjustes, cargarImpuestos, cargarTarifas } from "@/lib/datos";
 import { archivar, crearImpuesto, crearTarifa, guardarAjustes } from "../actions";
 
-export const metadata = { title: "Energía e impuestos" };
+export const metadata = { title: "Energía, impuestos y objetivos" };
 
 const FUENTE = { electricity: "Electricidad", gas: "Gas", water: "Agua" } as const;
 const hoy = () => new Date().toISOString().slice(0, 10);
@@ -24,7 +24,7 @@ export default async function Ajustes({ params }: { params: Promise<{ rid: strin
 
   return (
     <>
-      <Cabecera titulo="Energía e impuestos" subtitulo="Tarifas e impuestos con fecha de vigencia. Un cambio crea un registro nuevo y conserva el anterior." />
+      <Cabecera titulo="Energía, impuestos y objetivos" subtitulo="Tarifas e impuestos con fecha de vigencia. Un cambio crea un registro nuevo y conserva el anterior." />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Tarjeta>
@@ -45,6 +45,12 @@ export default async function Ajustes({ params }: { params: Promise<{ rid: strin
                     <option value="weighted_average">Media ponderada</option>
                   </Selector>
                   <Campo label="Decimales al presentar" name="money_decimals" type="number" min={0} max={6} defaultValue={ajustes.money_decimals} />
+                  <Campo label="Raciones previstas al mes" name="planned_portions_month" inputMode="decimal" unidad="rac."
+                    defaultValue={ajustes.targets?.planned_portions_month ?? ""} ayuda="Base para repartir los gastos generales por ración." />
+                  <Campo label="Avisar si el coste de un plato cambia más de" name="cost_change_pct" inputMode="decimal" unidad="%"
+                    defaultValue={ajustes.alert_thresholds?.cost_change_pct ?? 5} />
+                  <Campo label="Objetivo de coste de materia prima" name="target_food_cost_pct" inputMode="decimal" unidad="%"
+                    defaultValue={ajustes.targets?.target_food_cost_pct ?? ""} ayuda="Sobre el precio de venta neto. Se marca en la carta." />
                 </div>
               </FormularioAccion>
             ) : (

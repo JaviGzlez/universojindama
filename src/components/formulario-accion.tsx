@@ -16,8 +16,9 @@ const INICIAL: ResultadoAccion = { ok: false, mensaje: "" };
  * servidor confirma la escritura; nunca presenta un cambio local como guardado.
  */
 export function FormularioAccion({
-  action, children, boton = "Guardar", limpiar = true, className = "",
+  action, children, boton = "Guardar", limpiar = true, className = "", id,
 }: {
+  id?: string;
   action: (prev: ResultadoAccion, form: FormData) => Promise<ResultadoAccion>;
   children: ReactNode;
   boton?: string;
@@ -32,7 +33,7 @@ export function FormularioAccion({
   }, [estado, limpiar]);
 
   return (
-    <form ref={ref} action={accion} className={className}>
+    <form ref={ref} id={id} action={accion} className={className}>
       {children}
       {estado.errores && Object.keys(estado.errores).length > 0 && (
         <ul className="mt-4 space-y-1 rounded-xl bg-terracota-claro px-4 py-3 text-[13px] text-error">

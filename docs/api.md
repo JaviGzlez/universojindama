@@ -50,6 +50,15 @@ Los `GET` de recursos individuales devuelven `ETag: "<version>"`. Para modificar
 | GET / POST | `/restaurants/{id}/energy-tariffs` | |
 | GET / POST | `/restaurants/{id}/tax-rates` | `rate`: 10 % = `0.10` |
 | GET / POST | `/restaurants/{id}/consumables` | |
+| GET / POST | `/restaurants/{id}/suppliers` | |
+| GET / POST | `/restaurants/{id}/supplier-products` | |
+| GET / POST | `/restaurants/{id}/sales-channels` | |
+| GET / POST | `/restaurants/{id}/menu-items` | |
+| GET / POST | `/restaurants/{id}/recipes` | |
+| GET | `/restaurants/{id}/dashboard?year=2026` | Resumen mensual: ingresos, compras, personal, gastos, resultado |
+| GET | `/recipes/{id}/cost-history` | Fotografías de coste |
+| POST | `/recipe-versions/{id}/calculate` | Calcula con datos vigentes; acepta `channel` para simular precio. No guarda |
+| GET | `/purchase-invoices/{id}` | Factura con líneas |
 | GET / PATCH | `/ingredients/{id}` | PATCH con `If-Match`; archivar con `{"status":"archived"}` |
 | GET / POST | `/ingredients/{id}/prices` | Histórico; un precio nuevo es siempre una fila nueva |
 | POST | `/calculate` | Motor sin estado (ver abajo) |

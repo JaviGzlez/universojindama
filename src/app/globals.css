@@ -129,3 +129,36 @@ body {
   background-position: right 0.9rem center;
   background-repeat: no-repeat;
 }
+
+/* -------------------------------------------------------------------------
+   Gráficas
+   ------------------------------------------------------------------------- */
+@keyframes trazo {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes fundido {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.grafico-trazo {
+  stroke-dasharray: 1;
+  animation: trazo 1100ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.grafico-aparecer {
+  animation: fundido 900ms ease-out 250ms both;
+}
+
+/* Órbita del panel de grupo: gira el sistema y cada mundo contrarrota para que su nombre siga legible */
+@keyframes orbitar {
+  to { transform: rotate(360deg); }
+}
+@keyframes contraorbitar {
+  to { transform: rotate(-360deg); }
+}
+.orbita-giro { animation: orbitar 120s linear infinite; }
+.orbita-contra { animation: contraorbitar 120s linear infinite; }
+.orbita-pausa:hover .orbita-giro,
+.orbita-pausa:hover .orbita-contra,
+.orbita-pausa:focus-within .orbita-giro,
+.orbita-pausa:focus-within .orbita-contra { animation-play-state: paused; }

@@ -6,6 +6,7 @@ import type { ResultadoAccion } from "@/components/formulario-accion";
 import { D, dec } from "@/lib/engine/decimal";
 import { toBaseUnit } from "@/lib/engine/units";
 import { createClient } from "@/lib/supabase/server";
+import { recalcularDependientes } from "@/lib/recetas";
 
 // ---------------------------------------------------------------- utilidades
 const texto = (max = 200) => z.string().trim().min(1, "Campo obligatorio").max(max);
@@ -53,7 +54,8 @@ const ETIQUETAS: Record<string, string> = {
   unit_volume_ml: "Volumen por unidad", importe: "Precio", cantidad: "Cantidad", unidad: "Unidad", nominal_power_w: "Potencia",
   duty_pct: "Factor de funcionamiento", preheat_minutes: "Precalentamiento", batch_capacity: "Capacidad", period_cost: "Coste del periodo",
   productive_hours: "Horas productivas", price_per_unit: "Precio", rate_pct: "Tipo", valid_from: "Vigente desde", amount: "Importe",
-  money_decimals: "Decimales", timezone: "Zona horaria",
+  money_decimals: "Decimales", timezone: "Zona horaria", planned_portions_month: "Raciones previstas al mes",
+  cost_change_pct: "Umbral de aviso", target_food_cost_pct: "Objetivo de coste de materia prima",
 };
 
 function errorBD(error: { message: string; code?: string }): ResultadoAccion {
@@ -147,7 +149,12 @@ export async function registrarPrecio(_: ResultadoAccion, form: FormData): Promi
     notes: d.notes ?? `${d.importe} € por ${d.cantidad} ${d.unidad}`,
   });
   if (error) return errorBD(error);
-  return hecho(d.restaurant_id, `Precio de «${ing.name}» registrado. El anterior queda en el histórico.`, "/ingredientes");
+  // actualización automática: recalcula elaboraciones y platos que lo usan
+  const { data: rest } = await supabase.from("restaurants").select("organization_id").eq("id", d.restaurant_id).single();
+  const rc = rest ? await recalcularDependientes(supabase, d.restaurant_id, rest.organization_id, [d.ingredient_id]) : { recalculadas: 0, avisos: 0 };
+  revalidatePath(`/panel/${d.restaurant_id}/recetas`);
+  const extra = rc.recalculadas ? ` ${rc.recalculadas} ${rc.recalculadas === 1 ? "receta recalculada" : "recetas recalculadas"}${rc.avisos ? `, ${rc.avisos} con aviso` : ""}.` : "";
+  return hecho(d.restaurant_id, `Precio de «${ing.name}» registrado. El anterior queda en el histórico.${extra}`, "/ingredientes");
 }
 
 // ------------------------------------------------------------------- equipos
@@ -266,6 +273,12 @@ const Ajustes = z.object({
   version: z.coerce.number().int(),
   price_policy: z.enum(["last_validated", "weighted_average"]),
   money_decimals: z.coerce.number().int().min(0).max(6),
+  planned_portions_month: z.string().optional().transform((v) => (v && v.trim() ? Number(v.replace(",", ".")) : null))
+    .refine((v) => v === null || (Number.isFinite(v) && v > 0), "deben ser más de 0"),
+  cost_change_pct: z.string().optional().transform((v) => (v && v.trim() ? Number(v.replace(",", ".")) : 5))
+    .refine((v) => Number.isFinite(v) && v > 0 && v <= 100, "debe estar entre 0 y 100"),
+  target_food_cost_pct: z.string().optional().transform((v) => (v && v.trim() ? Number(v.replace(",", ".")) : null))
+    .refine((v) => v === null || (Number.isFinite(v) && v > 0 && v < 100), "debe estar entre 0 y 100"),
 });
 
 export async function guardarAjustes(_: ResultadoAccion, form: FormData): Promise<ResultadoAccion> {
@@ -276,7 +289,12 @@ export async function guardarAjustes(_: ResultadoAccion, form: FormData): Promis
   // Control de concurrencia: solo se actualiza si nadie ha cambiado la versión leída.
   const { data, error } = await supabase
     .from("restaurant_settings")
-    .update({ price_policy: d.price_policy, money_decimals: d.money_decimals })
+    .update({
+      price_policy: d.price_policy,
+      money_decimals: d.money_decimals,
+      targets: { planned_portions_month: d.planned_portions_month, target_food_cost_pct: d.target_food_cost_pct },
+      alert_thresholds: { cost_change_pct: d.cost_change_pct },
+    })
     .eq("restaurant_id", d.restaurant_id)
     .eq("version", d.version)
     .select("version");
@@ -288,13 +306,13 @@ export async function guardarAjustes(_: ResultadoAccion, form: FormData): Promis
 }
 
 // ------------------------------------------------------------------ archivar
-const TABLAS_ARCHIVABLES = ["ingredients", "equipment", "labor_profiles", "energy_tariffs", "tax_rates", "consumables"] as const;
+const TABLAS_ARCHIVABLES = ["ingredients", "equipment", "labor_profiles", "energy_tariffs", "tax_rates", "consumables", "suppliers", "supplier_products", "sales_channels", "menu_items"] as const;
 const Archivar = z.object({
   restaurant_id: uuid,
   tabla: z.enum(TABLAS_ARCHIVABLES),
   id: uuid,
   version: z.coerce.number().int(),
-  ruta: z.string().regex(/^\/[a-z]*$/),
+  ruta: z.string().regex(/^\/[a-z/]*$/),
 });
 
 /** Los catálogos referenciados no se borran: se archivan sin romper el histórico. */
@@ -312,4 +330,18 @@ export async function archivar(_: ResultadoAccion, form: FormData): Promise<Resu
   if (error) return errorBD(error);
   if (!data || data.length === 0) return { ok: false, mensaje: "No se ha podido archivar: recarga la página.", t: Date.now() };
   return hecho(d.restaurant_id, "Archivado.", d.ruta);
+}
+
+// --------------------------------------------------------------------- avisos
+const Aviso = z.object({ restaurant_id: uuid, id: uuid });
+
+export async function resolverAviso(_: ResultadoAccion, form: FormData): Promise<ResultadoAccion> {
+  const r = leer(Aviso, form);
+  if (!r.ok) return r.res;
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  const { error } = await supabase.from("alerts").update({ resolved_at: new Date().toISOString(), resolved_by: auth.user?.id })
+    .eq("id", r.data.id).eq("restaurant_id", r.data.restaurant_id);
+  if (error) return errorBD(error);
+  return hecho(r.data.restaurant_id, "Aviso marcado como visto.");
 }

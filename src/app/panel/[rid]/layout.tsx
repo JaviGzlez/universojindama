@@ -16,7 +16,7 @@ export default async function RestauranteLayout({ children, params }: { children
       <aside className="border-b border-linea bg-white/70 backdrop-blur-xl lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
         <div className="flex h-full flex-col">
           <div className="flex h-16 items-center justify-between px-5">
-            <Marca href={`/panel/${rid}`} />
+            <Marca href="/panel" />
           </div>
           <div className="px-4 pb-4">
             <SelectorRestaurante actual={rid} restaurantes={ctx.restaurants.map((r) => ({ id: r.id, name: r.name, slug: r.slug }))} />

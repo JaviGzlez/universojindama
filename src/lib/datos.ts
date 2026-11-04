@@ -102,8 +102,12 @@ export async function cargarConsumibles(sb: SupabaseClient, rid: string): Promis
 
 export async function cargarAjustes(sb: SupabaseClient, rid: string) {
   const { data } = await sb.from("restaurant_settings")
-    .select("price_policy, money_decimals, version")
+    .select("price_policy, money_decimals, version, targets, alert_thresholds")
     .eq("restaurant_id", rid).single();
-  return data as { price_policy: "last_validated" | "weighted_average"; money_decimals: number; version: number } | null;
+  return data as {
+    price_policy: "last_validated" | "weighted_average"; money_decimals: number; version: number;
+    targets: { planned_portions_month?: number | null; target_food_cost_pct?: number | null } | null;
+    alert_thresholds: { cost_change_pct?: number } | null;
+  } | null;
 }
 

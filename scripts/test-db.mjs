@@ -31,8 +31,8 @@ const A = '00000000-0000-0000-0000-00000000000a';
 const B = '00000000-0000-0000-0000-00000000000b';
 const C = '00000000-0000-0000-0000-00000000000c';
 await db.exec(`insert into auth.users (id, email, raw_user_meta_data) values ('${A}','a@x.com','{"display_name":"Javi"}'),('${B}','b@x.com','{"display_name":"María"}'),('${C}','c@x.com','{}')`);
-// la migración 4 debe poder repetirse
-await db.exec(fs.readFileSync(path.join(dir, fs.readdirSync(dir).sort().at(-1)), 'utf8'));
+// las migraciones a partir de la 4 deben poder repetirse
+for (const f of fs.readdirSync(dir).sort().slice(3)) await db.exec(fs.readFileSync(path.join(dir, f), 'utf8'));
 console.log((await db.query(`select public.grant_owner('A@x.com','grupo-jindama') r`)).rows[0].r);
 await db.exec(`insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000ad','admin@usuarios.universojindama.com')`);
 console.log('por usuario:', (await db.query(`select public.grant_owner('Admin','grupo-jindama') r`)).rows[0].r);
@@ -119,6 +119,89 @@ await as(C, async () => {
   check('no ve organizaciones', (await db.query('select * from organizations')).rows.length === 0);
   check('no ve actividad', (await db.query('select * from audit_events')).rows.length === 0);
   check('no ve ingredientes', (await db.query('select * from ingredients')).rows.length === 0);
+});
+
+console.log('Fases 2–5 (propietario)');
+await as(A, async () => {
+  const one = async (sql) => (await db.query(sql)).rows[0];
+  const R = jindama.id;
+  const ing = await one(`insert into ingredients (organization_id, restaurant_id, name, base_unit) values ('${jaleo.organization_id}','${R}','Tomate','g') returning id`);
+  const prep = await one(`insert into recipes (restaurant_id, name, kind) values ('${R}','Salsa','preparation') returning id`);
+  const vPrep = await one(`select public.new_recipe_version('${prep.id}') v`);
+  await db.exec(`update recipe_versions set yield_quantity=1000, yield_unit='g' where id='${vPrep.v}'`);
+  await db.exec(`insert into recipe_ingredients (restaurant_id, version_id, ingredient_id, quantity, unit) values ('${R}','${vPrep.v}','${ing.id}',1200,'g')`);
+  check('activa elaboración', (await tryQ(`select public.activate_recipe_version('${vPrep.v}')`)).ok);
+  check('no edita líneas de versión activa', !(await tryQ(`update recipe_ingredients set quantity=1 where version_id='${vPrep.v}'`)).ok);
+  const plato = await one(`insert into recipes (restaurant_id, name, kind) values ('${R}','Pasta','dish') returning id`);
+  const vPl = await one(`select public.new_recipe_version('${plato.id}') v`);
+  await db.exec(`update recipe_versions set portions=4 where id='${vPl.v}'`);
+  check('plato usa elaboración', (await tryQ(`insert into recipe_ingredients (restaurant_id, version_id, sub_recipe_id, quantity, unit) values ('${R}','${vPl.v}','${prep.id}',300,'g')`)).ok);
+  check('no usa un plato como subreceta', !(await tryQ(`insert into recipe_ingredients (restaurant_id, version_id, sub_recipe_id, quantity, unit) values ('${R}','${vPl.v}','${plato.id}',1,'unit')`)).ok);
+  check('activa plato', (await tryQ(`select public.activate_recipe_version('${vPl.v}')`)).ok);
+  const vPrep2 = await one(`select public.new_recipe_version('${prep.id}') v`);
+  const ver2 = await one(`select version from recipe_versions where id='${vPrep2.v}'`);
+  const sv = await tryQ(`select public.save_recipe_draft('${vPrep2.v}', ${ver2.version}, '{"yield_quantity":"900","yield_unit":"g","ingredientes":[{"ingredient_id":"${ing.id}","quantity":"1000","unit":"g"}]}'::jsonb) n`);
+  check('guarda borrador completo', sv.ok && Number((await one(`select quantity from recipe_ingredients where version_id='${vPrep2.v}'`)).quantity) === 1000);
+  check('rechaza versión desfasada', !(await tryQ(`select public.save_recipe_draft('${vPrep2.v}', ${ver2.version}, '{}'::jsonb)`)).ok);
+  check('nueva versión copia líneas', Number((await one(`select count(*) n from recipe_ingredients where version_id='${vPrep2.v}'`)).n) === 1);
+  const prep2 = await one(`insert into recipes (restaurant_id, name, kind) values ('${R}','Base','preparation') returning id`);
+  const vB = await one(`select public.new_recipe_version('${prep2.id}') v`);
+  await db.exec(`insert into recipe_ingredients (restaurant_id, version_id, sub_recipe_id, quantity, unit) values ('${R}','${vB.v}','${prep.id}',10,'g')`);
+  check('bloquea referencia circular', !(await tryQ(`insert into recipe_ingredients (restaurant_id, version_id, sub_recipe_id, quantity, unit) values ('${R}','${vPrep2.v}','${prep2.id}',10,'g')`)).ok);
+  const afect = (await db.query(`select * from public.recipes_using_ingredients('${R}', array['${ing.id}']::uuid[])`)).rows.map((r) => r.recipe_id);
+  check('detecta dependencias (elaboración y plato)', afect.includes(prep.id) && afect.includes(plato.id));
+
+  // compras
+  const sup = await one(`insert into suppliers (restaurant_id, name) values ('${R}','Makro') returning id`);
+  const inv = await one(`insert into purchase_invoices (restaurant_id, supplier_id, number, invoice_date) values ('${R}','${sup.id}','F-1','2026-11-01') returning id, version`);
+  check('detecta factura duplicada', !(await tryQ(`insert into purchase_invoices (restaurant_id, supplier_id, number, invoice_date) values ('${R}','${sup.id}',' f-1 ','2026-11-02')`)).ok);
+  const line = await one(`insert into purchase_lines (restaurant_id, invoice_id, ingredient_id, description, packs, pack_quantity, pack_unit, pack_price) values ('${R}','${inv.id}','${ing.id}','Caja 5 kg',2,5,'kg',10) returning id`);
+  check('no registra sin validar', !(await tryQ(`select public.post_purchase_invoice('${inv.id}')`)).ok);
+  check('no se valida a mano', !(await tryQ(`update purchase_invoices set status='validated' where id='${inv.id}'`)).ok);
+  check('valida', (await tryQ(`select public.validate_purchase_invoice('${inv.id}', ${inv.version}, '[{"id":"${line.id}","base_quantity":"10000","price_per_base_unit":"0.002","line_net":"20"}]'::jsonb)`)).ok);
+  check('líneas bloqueadas tras validar', !(await tryQ(`update purchase_lines set packs=3 where id='${line.id}'`)).ok);
+  const post = await tryQ(`select public.post_purchase_invoice('${inv.id}')`); if (!post.ok) console.log(post.e);
+  check('registra', post.ok);
+  check('no registra dos veces', !(await tryQ(`select public.post_purchase_invoice('${inv.id}')`)).ok);
+  check('precio aplicado', Number((await one(`select price_per_base_unit p from ingredient_prices where ingredient_id='${ing.id}' and source='invoice'`)).p) === 0.002);
+  check('entrada en inventario', Number((await one(`select quantity q from public.stock_on_hand('${R}') where ingredient_id='${ing.id}'`)).q) === 10000);
+
+  // carta y ventas
+  const ch = await one(`insert into sales_channels (restaurant_id, name, kind, commission_pct) values ('${R}','Glovo','platform',0.3) returning id`);
+  const mi = await one(`insert into menu_items (restaurant_id, name, recipe_id) values ('${R}','Pasta','${plato.id}') returning id`);
+  check('precio por canal', (await tryQ(`insert into channel_prices (restaurant_id, menu_item_id, channel_id, pvp, tax_rate) values ('${R}','${mi.id}','${ch.id}',12,0.1)`)).ok);
+  check('venta CSV sin duplicar', (await tryQ(`insert into sales (restaurant_id, sale_date, menu_item_id, channel_id, quantity, source, import_key) values ('${R}','2026-11-01','${mi.id}','${ch.id}',3,'csv','k1')`)).ok
+    && !(await tryQ(`insert into sales (restaurant_id, sale_date, menu_item_id, channel_id, quantity, source, import_key) values ('${R}','2026-11-01','${mi.id}','${ch.id}',3,'csv','k1')`)).ok);
+  check('reimportar con on conflict no falla', (await tryQ(`insert into sales (restaurant_id, sale_date, menu_item_id, channel_id, quantity, source, import_key) values ('${R}','2026-11-01','${mi.id}','${ch.id}',3,'csv','k1') on conflict (restaurant_id, import_key) do nothing`)).ok);
+  check('recuento y merma', (await tryQ(`with c as (insert into stock_counts (restaurant_id) values ('${R}') returning id) insert into stock_count_lines (restaurant_id, count_id, ingredient_id, quantity) select '${R}', id, '${ing.id}', 9000 from c`)).ok
+    && (await tryQ(`insert into stock_movements (restaurant_id, ingredient_id, kind, quantity) values ('${R}','${ing.id}','waste',-100)`)).ok);
+  check('merma debe ser negativa', !(await tryQ(`insert into stock_movements (restaurant_id, ingredient_id, kind, quantity) values ('${R}','${ing.id}','waste',100)`)).ok);
+
+  // economía
+  check('gasto manual', (await tryQ(`insert into financial_entries (restaurant_id, entry_date, kind, category, amount) values ('${R}','2026-10-05','expense','Luz',100)`)).ok);
+  check('cierra periodo', (await tryQ(`select public.set_period_status('${R}', 2026, 10, 'closed')`)).ok);
+  check('periodo cerrado bloquea', !(await tryQ(`insert into financial_entries (restaurant_id, entry_date, kind, category, amount) values ('${R}','2026-10-06','expense','Luz',1)`)).ok);
+  check('reabre periodo', (await tryQ(`select public.set_period_status('${R}', 2026, 10, 'open')`)).ok);
+  const job = await one(`insert into import_jobs (organization_id, file_name, file_hash, year) values ('${jaleo.organization_id}','a.xlsx','h',2026) returning id`);
+  await db.exec(`insert into import_rows (job_id, block, sheet, cell, entry_date, kind, category, amount) values
+    ('${job.id}',1,'OCTUBRE','H10','2026-10-01','purchase','Compras',50),('${job.id}',1,'OCTUBRE','AI10','2026-10-01','revenue','Ingresos',300),('${job.id}',2,'OCTUBRE','H56','2026-10-01','purchase','Compras',70)`);
+  const ap = await tryQ(`select public.apply_import('${job.id}', '{"1":"${R}","2":null}'::jsonb) r`);
+  check('aplica importación (solo bloques asignados)', ap.ok && ap.r.rows[0].r.inserted === 2);
+  const job2 = await one(`insert into import_jobs (organization_id, file_name, file_hash, year) values ('${jaleo.organization_id}','a.xlsx','h2',2026) returning id`);
+  await db.exec(`insert into import_rows (job_id, block, sheet, cell, entry_date, kind, category, amount) values ('${job2.id}',1,'OCTUBRE','H10','2026-10-01','purchase','Compras',55)`);
+  await db.exec(`select public.apply_import('${job2.id}', '{"1":"${R}"}'::jsonb)`);
+  check('reimportar sustituye, no duplica', Number((await one(`select count(*) n from financial_entries where restaurant_id='${R}' and source='excel'`)).n) === 1);
+  check('deshace importación', (await tryQ(`select public.revert_import('${job2.id}')`)).ok
+    && Number((await one(`select count(*) n from financial_entries where restaurant_id='${R}' and source='excel'`)).n) === 0);
+});
+
+console.log('Cocina en Jaleo (B), fases 2–5');
+await as(B, async () => {
+  check('crea receta en Jaleo', (await tryQ(`insert into recipes (restaurant_id, name, kind) values ('${jaleo.id}','Croquetas','dish')`)).ok);
+  check('no crea proveedores (rol compras)', !(await tryQ(`insert into suppliers (restaurant_id, name) values ('${jaleo.id}','X')`)).ok);
+  check('no crea gastos (rol administración)', !(await tryQ(`insert into financial_entries (restaurant_id, entry_date, kind, category, amount) values ('${jaleo.id}','2026-10-05','expense','Luz',1)`)).ok);
+  check('no ve importaciones', (await db.query('select * from import_jobs')).rows.length === 0);
+  check('no crea recetas en Jindama', !(await tryQ(`insert into recipes (restaurant_id, name, kind) values ('${jindama.id}','X','dish')`)).ok);
 });
 
 console.log(fails ? `${fails} fallos` : 'Todo correcto');
