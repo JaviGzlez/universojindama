@@ -4,6 +4,7 @@ import { Cabecera, Campo, Insignia, Selector, Tarjeta } from "@/components/ui";
 import { getRestaurante, NOMBRE_ROL, type Rol, type Restaurante } from "@/lib/contexto";
 import { adminDisponible } from "@/lib/supabase/admin";
 import { Avatar } from "@/components/avatar";
+import { usuarioDeEmail } from "@/lib/usuarios";
 import { cambiarAcceso, cambiarContrasena, cambiarNombre, crearUsuario, quitarAcceso } from "./actions";
 
 export const metadata = { title: "Usuarios" };
@@ -72,12 +73,12 @@ export default async function Usuarios({ params }: { params: Promise<{ rid: stri
       {propietario && (
         <Tarjeta className="mb-8">
           <h2 className="text-[19px] font-semibold tracking-[-0.01em]">Nuevo usuario</h2>
-          <p className="mt-1 text-[14px] text-niebla">La cuenta queda activa al momento. Comparte el correo y la contraseña con la persona por un canal privado.</p>
+          <p className="mt-1 text-[14px] text-niebla">La cuenta queda activa al momento, sin correo ni confirmación. Pásale el usuario y la contraseña por un canal privado.</p>
           <FormularioAccion action={crearUsuario} boton="Crear usuario" className="mt-6">
             <input type="hidden" name="rid" value={rid} />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Campo label="Nombre" name="nombre" required placeholder="Manuel" />
-              <Campo label="Correo" name="email" type="email" required autoComplete="off" placeholder="manuel@…" />
+              <Campo label="Usuario" name="usuario" required autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="manuel" ayuda="Con esto entrará. Sin espacios." />
               <Campo label="Contraseña" name="password" type="text" required minLength={8} autoComplete="new-password" ayuda="Mínimo 8 caracteres." />
               <SelectorRol />
             </div>
@@ -100,7 +101,7 @@ export default async function Usuarios({ params }: { params: Promise<{ rid: stri
                     <p className="text-[16px] font-semibold">
                       {m.nombre} {esYo && <span className="font-normal text-niebla">(tú)</span>}
                     </p>
-                    {m.email && <p className="text-[13px] text-niebla">{m.email}</p>}
+                    {m.email && <p className="text-[13px] text-niebla">Usuario: {usuarioDeEmail(m.email)}</p>}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:justify-end">

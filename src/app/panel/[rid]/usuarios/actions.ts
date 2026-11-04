@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { ResultadoAccion } from "@/components/formulario-accion";
 import { getRestaurante } from "@/lib/contexto";
 import { adminDisponible, createAdminClient } from "@/lib/supabase/admin";
+import { emailDeUsuario, normalizarUsuario, PATRON_USUARIO } from "@/lib/usuarios";
 
 const ROLES = ["admin", "kitchen", "purchasing", "accounting", "viewer"] as const;
 const t = () => Date.now();
@@ -25,7 +26,7 @@ function alcance(form: FormData): { restaurantes: string[] | null; error?: strin
 }
 
 function traducir(msg: string) {
-  if (/already been registered|already registered|exists/i.test(msg)) return "Ya existe una cuenta con ese correo.";
+  if (/already been registered|already registered|exists/i.test(msg)) return "Ya existe ese nombre de usuario.";
   if (/password/i.test(msg) && /weak|short|characters/i.test(msg)) return "La contraseña es demasiado débil (mínimo 8 caracteres).";
   return msg;
 }
@@ -33,7 +34,7 @@ function traducir(msg: string) {
 const Nuevo = z.object({
   rid: z.string().uuid(),
   nombre: z.string().trim().min(1, "Escribe un nombre").max(60),
-  email: z.string().trim().toLowerCase().email("Correo no válido"),
+  usuario: z.string().transform(normalizarUsuario).refine((v) => PATRON_USUARIO.test(v), "Usa de 2 a 30 letras o números, sin espacios (puede llevar . _ -)"),
   password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres").max(72),
   rol: z.enum(ROLES),
 });
@@ -52,7 +53,7 @@ export async function crearUsuario(_: ResultadoAccion, form: FormData): Promise<
 
   const admin = createAdminClient();
   const { data, error } = await admin.auth.admin.createUser({
-    email: d.email,
+    email: emailDeUsuario(d.usuario),
     password: d.password,
     email_confirm: true, // la cuenta queda activa sin correo de confirmación
     user_metadata: { display_name: d.nombre },
@@ -68,7 +69,7 @@ export async function crearUsuario(_: ResultadoAccion, form: FormData): Promise<
     return fallo(`No se ha podido asignar el acceso: ${e2.message}`);
   }
   revalidatePath(`/panel/${d.rid}/usuarios`);
-  return { ok: true, mensaje: `${d.nombre} ya puede entrar con ${d.email}.`, t: t() };
+  return { ok: true, mensaje: `${d.nombre} ya puede entrar con el usuario «${d.usuario}».`, t: t() };
 }
 
 const Acceso = z.object({ rid: z.string().uuid(), user_id: z.string().uuid(), rol: z.enum(ROLES) });

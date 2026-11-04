@@ -34,6 +34,8 @@ await db.exec(`insert into auth.users (id, email, raw_user_meta_data) values ('$
 // la migración 4 debe poder repetirse
 await db.exec(fs.readFileSync(path.join(dir, fs.readdirSync(dir).sort().at(-1)), 'utf8'));
 console.log((await db.query(`select public.grant_owner('A@x.com','grupo-jindama') r`)).rows[0].r);
+await db.exec(`insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000ad','admin@usuarios.universojindama.com')`);
+console.log('por usuario:', (await db.query(`select public.grant_owner('Admin','grupo-jindama') r`)).rows[0].r);
 const jaleo = (await db.query(`select id, organization_id from restaurants where slug='jaleo'`)).rows[0];
 const jindama = (await db.query(`select id from restaurants where slug='jindama'`)).rows[0];
 await db.exec(`insert into memberships (organization_id, restaurant_id, user_id, role) values ('${jaleo.organization_id}','${jaleo.id}','${B}','kitchen')`);

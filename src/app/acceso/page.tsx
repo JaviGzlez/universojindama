@@ -20,7 +20,7 @@ export default async function Acceso({ searchParams }: { searchParams: Promise<{
             <Mundo id="juye" size={40} />
           </div>
           <h1 className="mt-8 text-center text-[32px] font-semibold tracking-[-0.03em]">Acceder al universo</h1>
-          <p className="mt-2 text-center text-[15px] text-niebla">Entra con la cuenta que te ha dado el administrador.</p>
+          <p className="mt-2 text-center text-[15px] text-niebla">Entra con tu usuario y contraseña.</p>
           <FormularioAcceso next={next} errorInicial={error === "enlace" ? "El enlace no es válido o ha caducado." : undefined} />
         </div>
       </main>

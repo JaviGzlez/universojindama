@@ -4,6 +4,7 @@ import { Marca } from "@/components/marca";
 import { getContexto } from "@/lib/contexto";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { salir } from "@/app/acceso/actions";
+import { usuarioDeEmail } from "@/lib/usuarios";
 
 export const metadata: Metadata = { title: "Panel" };
 export const dynamic = "force-dynamic";
@@ -24,13 +25,13 @@ export default async function PanelLayout({ children }: { children: React.ReactN
     return (
       <Aviso titulo="Tu cuenta aún no tiene acceso">
         <p>
-          Has entrado como <strong>{ctx.user.email}</strong>, pero todavía no tienes acceso a ningún restaurante. Pídeselo al administrador del grupo.
+          Has entrado como <strong>{usuarioDeEmail(ctx.user.email)}</strong>, pero todavía no tienes acceso a ningún restaurante. Pídeselo al administrador del grupo.
         </p>
         <p className="mt-4">
           Si eres el primer propietario, abre el editor SQL de Supabase y ejecuta:
         </p>
         <pre className="mt-3 overflow-x-auto rounded-xl bg-tinta p-4 text-left text-[13px] text-crema">
-          {`select public.grant_owner('${ctx.user.email}', 'grupo-jindama');`}
+          {`select public.grant_owner('${usuarioDeEmail(ctx.user.email)}', 'grupo-jindama');`}
         </pre>
         <form action={salir} className="mt-8">
           <button className="text-[14px] font-medium text-tinta underline-offset-4 hover:underline">Cerrar sesión</button>

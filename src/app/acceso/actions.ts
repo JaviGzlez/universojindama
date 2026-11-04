@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { emailDeUsuario } from "@/lib/usuarios";
 
 export interface EstadoAcceso {
   error?: string;
@@ -11,8 +12,8 @@ export interface EstadoAcceso {
 }
 
 const Credenciales = z.object({
-  email: z.string().trim().email("Introduce un correo válido."),
-  password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres."),
+  usuario: z.string().trim().min(1, "Escribe tu usuario."),
+  password: z.string().min(1, "Escribe tu contraseña."),
   modo: z.literal("entrar"),
   next: z.string().optional(),
 });
@@ -27,7 +28,8 @@ export async function acceder(_prev: EstadoAcceso, form: FormData): Promise<Esta
   }
   const parsed = Credenciales.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos no válidos." };
-  const { email, password, next } = parsed.data;
+  const { usuario, password, next } = parsed.data;
+  const email = emailDeUsuario(usuario);
   const supabase = await createClient();
 
   const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -42,7 +44,7 @@ export async function salir() {
 }
 
 function traducir(msg: string) {
-  if (/invalid login credentials/i.test(msg)) return "Correo o contraseña incorrectos.";
+  if (/invalid login credentials/i.test(msg)) return "Usuario o contraseña incorrectos.";
   if (/email not confirmed/i.test(msg)) return "Confirma tu correo antes de entrar.";
   if (/already registered/i.test(msg)) return "Ya existe una cuenta con ese correo. Entra con tu contraseña.";
   if (/rate limit/i.test(msg)) return "Demasiados intentos. Espera un momento y vuelve a probar.";

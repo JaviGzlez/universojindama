@@ -176,3 +176,33 @@ revoke execute on function public.set_member_access(uuid, uuid, public.app_role,
 revoke execute on function public.remove_member(uuid, uuid) from public, anon;
 grant execute on function public.set_member_access(uuid, uuid, public.app_role, uuid[]) to authenticated;
 grant execute on function public.remove_member(uuid, uuid) to authenticated;
+
+-- grant_owner acepta también un nombre de usuario («admin»)
+create or replace function public.grant_owner(p_email text, p_org_slug text)
+returns text
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_email text := lower(trim(p_email));
+  v_user uuid;
+  v_org  uuid;
+begin
+  if position('@' in v_email) = 0 then
+    v_email := v_email || '@usuarios.universojindama.com';
+  end if;
+  select id into v_user from auth.users where lower(email) = v_email;
+  if v_user is null then
+    raise exception 'No existe el usuario %. Créalo antes en Authentication → Users.', v_email;
+  end if;
+  select id into v_org from public.organizations where slug = p_org_slug;
+  if v_org is null then
+    raise exception 'No existe la organización %', p_org_slug;
+  end if;
+  insert into public.memberships (organization_id, user_id, role)
+  values (v_org, v_user, 'owner')
+  on conflict do nothing;
+  return 'Propietario asignado';
+end;
+$$;
+
+revoke execute on function public.grant_owner(text, text) from public, anon, authenticated;

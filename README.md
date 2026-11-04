@@ -50,20 +50,23 @@ En Supabase → **Authentication → URL Configuration**:
 - **Site URL:** `https://TU-DOMINIO.vercel.app`
 - **Redirect URLs:** `https://TU-DOMINIO.vercel.app/auth/callback` y, para desarrollo, `http://localhost:3000/auth/callback`
 
-### 5. Primer propietario y equipo
+### 5. Usuario admin y equipo
 
-No hay registro público: las cuentas las crea el propietario.
+Se entra con **usuario y contraseña**, sin correo ni confirmación. Supabase exige un email por cuenta, así que la web usa uno interno (`usuario@usuarios.universojindama.com`) que nadie ve ni recibe correo.
 
-1. En Supabase → **Authentication → Users → Add user → Create new user**, crea tu cuenta con correo y contraseña y marca **Auto Confirm User**.
+1. En Supabase → **Authentication → Users → Add user → Create new user**:
+   - Email: `admin@usuarios.universojindama.com`
+   - Password: la que quieras
+   - Marca **Auto Confirm User**
 2. En el SQL Editor:
 
    ```sql
-   select public.grant_owner('tu@email.com', 'grupo-jindama');
-   update public.profiles set display_name = 'Javi' where email = 'tu@email.com';
+   select public.grant_owner('admin', 'grupo-jindama');
+   update public.profiles set display_name = 'Javi' where email = 'admin@usuarios.universojindama.com';
    ```
 
-3. Entra en `/acceso`. En **Usuarios** crea al resto del equipo (nombre, correo, contraseña, rol y restaurantes). Desde ahí también cambias contraseñas o retiras accesos.
-4. Recomendado: en Supabase → **Authentication → Sign In / Providers**, desactiva **Allow new users to sign up**. El panel sigue pudiendo crear usuarios.
+3. Entra en `/acceso` con el usuario `admin`. En **Usuarios** crea al resto (nombre, usuario, contraseña, rol y restaurantes). Desde ahí también cambias contraseñas o retiras accesos.
+4. Recomendado: en Supabase → **Authentication → Sign In / Providers**, desactiva **Allow new users to sign up** y **Confirm email**. El panel sigue pudiendo crear usuarios.
 
 **Actividad:** todos los miembros ven lo que se hace en los restaurantes a los que tienen acceso (quién, qué y cuándo), en el apartado *Actividad* y en el Inicio.
 

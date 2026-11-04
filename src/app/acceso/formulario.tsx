@@ -11,9 +11,9 @@ export function FormularioAcceso({ next, errorInicial }: { next?: string; errorI
       <input type="hidden" name="modo" value="entrar" />
       {next && <input type="hidden" name="next" value={next} />}
       <label className="block">
-        <span className="mb-1.5 block text-[13px] font-medium text-grafito">Correo electrónico</span>
+        <span className="mb-1.5 block text-[13px] font-medium text-grafito">Usuario</span>
         <input
-          name="email" type="email" autoComplete="email" required
+          name="usuario" type="text" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} required
           className="h-12 w-full rounded-xl border border-linea bg-white px-4 text-[16px] outline-none transition focus:border-musgo focus:ring-4 focus:ring-musgo/15"
         />
       </label>
