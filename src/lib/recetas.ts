@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ENGINE_VERSION, type CalculationResult, type ChannelInput, type QuantityUnit } from "@/lib/engine";
 import { cargarConsumibles, cargarEquipos, cargarIngredientes, cargarPerfiles, cargarTarifas, tarifasVigentes } from "@/lib/datos";
 import { gastosGeneralesPorRacion } from "@/lib/economia";
-import { calcularDesdeCatalogo, type CatalogoPlano, type ResultadoCalculo, type VersionEditable } from "@/lib/recetas-entrada";
+import { alergenosDe, calcularDesdeCatalogo, type CatalogoPlano, type ResultadoCalculo, type VersionEditable } from "@/lib/recetas-entrada";
 
 export interface Receta {
   id: string;
@@ -35,10 +35,21 @@ export interface Version {
   equipos: { id: string; equipment_id: string; minutes: string; usage_share: string; preheat_share: string; measured_consumption: string | null }[];
   personal: { id: string; labor_profile_id: string; active_minutes: string }[];
   consumibles: { id: string; consumable_id: string }[];
+  prep_minutes: string | null;
+  cook_minutes: string | null;
+  rest_minutes: string | null;
+  shelf_life_hours: string | null;
+  storage: string | null;
+  serving: string | null;
+  portion_size: string | null;
+  extra_allergens: string[];
+  pasos: { id: string; position: number; title: string | null; description: string; minutes: string | null; temperature_c: string | null; equipment_id: string | null; is_critical: boolean }[];
 }
 
 const COLS_VERSION =
   "id, recipe_id, number, status, yield_quantity, yield_unit, portions, labor_is_variable, use_overheads, steps, notes, version, created_at, activated_at, " +
+  "prep_minutes, cook_minutes, rest_minutes, shelf_life_hours, storage, serving, portion_size, extra_allergens, " +
+  "pasos:recipe_steps(id, position, title, description, minutes, temperature_c, equipment_id, is_critical), " +
   "ingredientes:recipe_ingredients(id, position, ingredient_id, sub_recipe_id, quantity, unit, quantity_type), " +
   "equipos:recipe_equipment_usage(id, equipment_id, minutes, usage_share, preheat_share, measured_consumption), " +
   "personal:recipe_labor_usage(id, labor_profile_id, active_minutes), " +
@@ -49,6 +60,8 @@ export async function cargarVersion(sb: SupabaseClient, versionId: string): Prom
   if (!data) return null;
   const v = data as unknown as Version;
   v.ingredientes.sort((a, b) => a.position - b.position);
+  v.pasos = (v.pasos ?? []).sort((a, b) => a.position - b.position);
+  v.extra_allergens = v.extra_allergens ?? [];
   return v;
 }
 
@@ -81,6 +94,7 @@ export async function cargarCatalogo(sb: SupabaseClient, rid: string, orgId: str
       id: i.id, name: i.name, baseUnit: i.base_unit, yieldRatio: i.yield_ratio,
       densityGPerMl: i.density_g_per_ml, unitWeightG: i.unit_weight_g, unitVolumeMl: i.unit_volume_ml,
       pricePerBaseUnit: i.precio?.price_per_base_unit ?? null, priceQuality: i.precio?.quality ?? "measured",
+      allergens: i.allergens ?? [], category: i.category,
     }])),
     equipos: Object.fromEntries(eqs.map((e) => {
       const t = e.energy_tariff_id ? vig.get(e.energy_tariff_id) : undefined;
@@ -110,7 +124,7 @@ export async function cargarCatalogo(sb: SupabaseClient, rid: string, orgId: str
     if (cat.subrecetas[p.id]) return;
     const v = versiones.get(p.id);
     if (!v) {
-      cat.subrecetas[p.id] = { name: p.name, baseUnit: "g", costPerUnit: null, status: "sin_version" };
+      cat.subrecetas[p.id] = { name: p.name, baseUnit: "g", costPerUnit: null, status: "sin_version", allergens: [] };
       return;
     }
     if (enCurso.has(p.id)) return; // la base de datos impide ciclos; esto es solo una protección
@@ -120,7 +134,10 @@ export async function cargarCatalogo(sb: SupabaseClient, rid: string, orgId: str
       if (sub) resolver(sub);
     }
     const r = calcularDesdeCatalogo(editable(v, "preparation"), cat).result;
-    cat.subrecetas[p.id] = { name: p.name, baseUnit: v.yield_unit ?? "g", costPerUnit: r.costs.direct_per_portion, status: r.status };
+    cat.subrecetas[p.id] = {
+      name: p.name, baseUnit: v.yield_unit ?? "g", costPerUnit: r.costs.direct_per_portion, status: r.status,
+      allergens: alergenosDe(editable(v, "preparation"), cat, v.extra_allergens),
+    };
     enCurso.delete(p.id);
   };
   preps.forEach(resolver);

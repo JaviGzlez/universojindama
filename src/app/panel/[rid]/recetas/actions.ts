@@ -58,6 +58,14 @@ const Borrador = z.object({
   })).max(30),
   personal: z.array(z.object({ labor_profile_id: z.string().uuid(), active_minutes: num() })).max(30),
   consumibles: z.array(z.object({ consumable_id: z.string().uuid() })).max(30),
+  prep_minutes: num(true), cook_minutes: num(true), rest_minutes: num(true), shelf_life_hours: num(true),
+  storage: z.string().max(300), serving: z.string().max(2000), portion_size: z.string().max(60),
+  extra_allergens: z.array(z.string().trim().min(1).max(40)).max(30),
+  pasos: z.array(z.object({
+    title: z.string().max(80), description: z.string().max(2000), minutes: num(true), temperature_c: z.string().trim().max(8)
+      .refine((v) => v === "" || dec(v) !== null, "Temperatura no válida"),
+    equipment_id: z.string().uuid().nullable(), is_critical: z.boolean(),
+  })).max(60),
 });
 
 export async function guardarBorrador(rid: string, recipeId: string, versionId: string, esperada: number, datos: unknown): Promise<ResultadoAccion & { version?: number }> {
@@ -71,7 +79,11 @@ export async function guardarBorrador(rid: string, recipeId: string, versionId: 
   }
   const { data, error } = await r.ctx.supabase.rpc("save_recipe_draft", {
     p_version: versionId, p_expected: esperada,
-    p_data: { ...d, equipos: d.equipos.map((e) => ({ ...e, measured_consumption: e.measured_consumption || null })) },
+    p_data: {
+      ...d,
+      equipos: d.equipos.map((e) => ({ ...e, measured_consumption: e.measured_consumption || null })),
+      pasos: d.pasos.map((x) => ({ ...x, temperature_c: x.temperature_c ? dec(x.temperature_c)!.toString() : "" })),
+    },
   });
   if (error) return errorBD(error);
   revalidatePath(`/panel/${rid}/recetas/${recipeId}`);
@@ -161,4 +173,72 @@ export async function archivarReceta(_: ResultadoAccion, form: FormData): Promis
   if (error) return errorBD(error);
   revalidatePath(`/panel/${rid}/recetas`);
   redirect(`/panel/${rid}/recetas`);
+}
+
+// ---------------------------------------------------------- escandallo rápido
+export async function guardarComoReceta(rid: string, nombre: string, kind: "dish" | "preparation", categoria: string, datos: unknown): Promise<ResultadoAccion & { id?: string }> {
+  const r = await getRestaurante(rid);
+  if (!r) return fallo("Sin acceso.");
+  if (!nombre.trim()) return fallo("Ponle un nombre a la receta.");
+  const p = Borrador.safeParse(datos);
+  if (!p.success) return fallo(`Revisa el escandallo: ${p.error.issues[0]?.message ?? "datos no válidos"}.`);
+  const sb = r.ctx.supabase;
+  const { data: rec, error } = await sb.from("recipes").insert({ restaurant_id: rid, name: nombre.trim().slice(0, 120), kind, category: categoria.trim() || null }).select("id").single();
+  if (error) return errorBD(error);
+  const { data: vid, error: e2 } = await sb.rpc("new_recipe_version", { p_recipe: rec.id });
+  if (e2) return errorBD(e2);
+  const { data: v } = await sb.from("recipe_versions").select("version").eq("id", vid as string).single();
+  const d = p.data;
+  const { error: e3 } = await sb.rpc("save_recipe_draft", {
+    p_version: vid, p_expected: v?.version ?? 1,
+    p_data: {
+      ...d,
+      equipos: d.equipos.map((e) => ({ ...e, measured_consumption: e.measured_consumption || null })),
+      pasos: d.pasos.map((x) => ({ ...x, temperature_c: x.temperature_c ? dec(x.temperature_c)!.toString() : "" })),
+    },
+  });
+  if (e3) {
+    await sb.from("recipes").update({ status: "archived" }).eq("id", rec.id);
+    return errorBD(e3);
+  }
+  revalidatePath(`/panel/${rid}/recetas`);
+  revalidatePath(`/panel/${rid}/elaboraciones`);
+  return { ok: true, mensaje: "Guardada como receta (borrador). Revísala y actívala.", id: rec.id, t: t() };
+}
+
+const Rapida = z.object({
+  name: z.string().trim().min(1, "Escribe el nombre").max(120),
+  base_unit: z.enum(["g", "ml", "unit"]),
+  yield_pct: z.string().refine((v) => { const x = dec(v); return x !== null && x.greaterThan(0) && x.lessThanOrEqualTo(100); }, "Rendimiento entre 0 y 100 %"),
+  price: z.string().refine((v) => v.trim() === "" || (dec(v) !== null && dec(v)!.greaterThanOrEqualTo(0)), "Precio no válido"),
+  allergens: z.array(z.string()).max(14),
+});
+
+/** Alta de materia prima (con su precio) sin salir del escandallo. Precio por kg, litro o unidad. */
+export async function crearMateriaRapida(rid: string, datos: unknown): Promise<ResultadoAccion & {
+  ingrediente?: { id: string; name: string; baseUnit: "g" | "ml" | "unit"; yieldRatio: string; pricePerBaseUnit: string | null; allergens: string[] };
+}> {
+  const r = await getRestaurante(rid);
+  if (!r) return fallo("Sin acceso.");
+  const p = Rapida.safeParse(datos);
+  if (!p.success) return fallo(p.error.issues[0]?.message ?? "Datos no válidos");
+  const d = p.data;
+  const sb = r.ctx.supabase;
+  const yieldRatio = dec(d.yield_pct)!.div(100).toString();
+  const { data: ing, error } = await sb.from("ingredients").insert({
+    organization_id: r.restaurante.organization_id, restaurant_id: rid, name: d.name, base_unit: d.base_unit,
+    yield_ratio: yieldRatio, allergens: d.allergens, source: "Alta desde escandallo",
+  }).select("id").single();
+  if (error) return errorBD(error);
+  let precio: string | null = null;
+  if (d.price.trim()) {
+    precio = dec(d.price)!.div(d.base_unit === "unit" ? 1 : 1000).toDecimalPlaces(8).toString();
+    const { error: e2 } = await sb.from("ingredient_prices").insert({ restaurant_id: rid, ingredient_id: ing.id, price_per_base_unit: precio, source: "manual", notes: "Alta desde escandallo" });
+    if (e2) return errorBD(e2);
+  }
+  revalidatePath(`/panel/${rid}/ingredientes`);
+  return {
+    ok: true, mensaje: `«${d.name}» creada.`, t: t(),
+    ingrediente: { id: ing.id, name: d.name, baseUnit: d.base_unit, yieldRatio, pricePerBaseUnit: precio, allergens: d.allergens },
+  };
 }

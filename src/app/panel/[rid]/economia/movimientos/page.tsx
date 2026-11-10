@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AccionRapida, FormularioAccion } from "@/components/formulario-accion";
-import { Cabecera, Campo, Insignia, Selector, Tabla, Tarjeta, Vacio, euro } from "@/components/ui";
+import { Cabecera, Campo, Insignia, Selector, Tabla, Tarjeta, Vacio, euro, SinPermiso } from "@/components/ui";
 import { getRestaurante } from "@/lib/contexto";
 import { NOMBRE_TIPO, type TipoMovimiento } from "@/lib/economia";
 import { borrarMovimiento, crearMovimiento } from "../actions";
@@ -14,6 +14,7 @@ export default async function Movimientos({ params, searchParams }: { params: Pr
   const r = await getRestaurante(rid);
   if (!r) notFound();
   const { ctx, restaurante } = r;
+  if (!ctx.puedeVer(restaurante, "economia")) return <SinPermiso apartado="economía" />;
   const mes = sp.mes && /^\d{4}-\d{2}$/.test(sp.mes) ? sp.mes : new Date().toISOString().slice(0, 7);
   const [y, m] = mes.split("-").map(Number);
   const hasta = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
@@ -23,7 +24,7 @@ export default async function Movimientos({ params, searchParams }: { params: Pr
     .order("entry_date", { ascending: false }).order("created_at", { ascending: false }).limit(1000);
   if (sp.tipo && sp.tipo in NOMBRE_TIPO) q = q.eq("kind", sp.tipo);
   const { data: movs } = await q;
-  const puede = ctx.puede(restaurante, "ajustes");
+  const puede = ctx.puede(restaurante, "economia");
   const mover = (d: number) => new Date(Date.UTC(y, m - 1 + d, 1)).toISOString().slice(0, 7);
   const url = (o: Record<string, string | undefined>) => `?${new URLSearchParams(Object.entries({ mes, tipo: sp.tipo, ...o }).filter(([, v]) => v) as [string, string][])}`;
   const total = (movs ?? []).reduce((a, x) => a + Number(x.amount), 0);

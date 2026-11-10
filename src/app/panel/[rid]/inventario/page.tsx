@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { FormularioAccion } from "@/components/formulario-accion";
-import { Cabecera, Campo, Insignia, Selector, Tabla, Tarjeta, Vacio, claseInput, euro, numero } from "@/components/ui";
+import { Cabecera, Campo, Insignia, Selector, Tabla, Tarjeta, Vacio, claseInput, euro, numero, SinPermiso } from "@/components/ui";
 import { getRestaurante } from "@/lib/contexto";
 import { cargarIngredientes } from "@/lib/datos";
 import type { IngredientRef } from "@/lib/engine";
@@ -20,6 +20,7 @@ export default async function Inventario({ params, searchParams }: { params: Pro
   const r = await getRestaurante(rid);
   if (!r) notFound();
   const { ctx, restaurante } = r;
+  if (!ctx.puedeVer(restaurante, "inventario")) return <SinPermiso apartado="el inventario" />;
   const sb = ctx.supabase;
   const [ings, { data: stock }, { data: recuentos }, { data: ultimos }] = await Promise.all([
     cargarIngredientes(sb, rid, restaurante.organization_id),
@@ -28,7 +29,7 @@ export default async function Inventario({ params, searchParams }: { params: Pro
     sb.from("stock_movements").select("id, ingredient_id, kind, quantity, occurred_at, reference, notes").eq("restaurant_id", rid).order("occurred_at", { ascending: false }).limit(15),
   ]);
   const ing = new Map(ings.map((i) => [i.id, i]));
-  const puede = ctx.puede(restaurante, "precios");
+  const puede = ctx.puede(restaurante, "inventario");
   const filasStock = ((stock ?? []) as { ingredient_id: string; quantity: string; last_count_at: string | null }[])
     .map((s) => ({ ...s, i: ing.get(s.ingredient_id) }))
     .filter((s) => s.i)

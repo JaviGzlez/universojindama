@@ -4,70 +4,74 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
-const SECCIONES: { titulo: string; items: { nombre: string; ruta?: string; exacta?: boolean }[] }[] = [
-  {
-    titulo: "Restaurante",
-    items: [
-      { nombre: "Inicio", ruta: "", exacta: true },
-      { nombre: "Actividad", ruta: "/actividad" },
-    ],
-  },
+type Area = "recetas" | "materias" | "equipos" | "compras" | "inventario" | "carta" | "ventas" | "economia" | "personal" | "ajustes";
+interface Item { nombre: string; ruta?: string; exacta?: boolean; area?: Area | Area[]; href?: string }
+
+const SECCIONES: { titulo: string; items: Item[]; soloPropietario?: boolean; neutra?: boolean }[] = [
+  { titulo: "Restaurante", items: [{ nombre: "Inicio", ruta: "", exacta: true }] },
   {
     titulo: "Cocina",
     items: [
-      { nombre: "Recetas y elaboraciones", ruta: "/recetas" },
-      { nombre: "Escandallo rápido", ruta: "/escandallo" },
-      { nombre: "Materias primas", ruta: "/ingredientes" },
-      { nombre: "Equipos y consumibles", ruta: "/equipos" },
+      { nombre: "Platos", ruta: "/recetas", area: "recetas" },
+      { nombre: "Elaboraciones", ruta: "/elaboraciones", area: "recetas" },
+      { nombre: "Escandallo rápido", ruta: "/escandallo", area: ["recetas", "materias"] },
+      { nombre: "Materias primas", ruta: "/ingredientes", area: "materias" },
+      { nombre: "Equipos y consumibles", ruta: "/equipos", area: "equipos" },
     ],
   },
   {
     titulo: "Compras y almacén",
     items: [
-      { nombre: "Facturas", ruta: "/compras", exacta: true },
-      { nombre: "Proveedores", ruta: "/compras/proveedores" },
-      { nombre: "Inventario y mermas", ruta: "/inventario" },
+      { nombre: "Facturas", ruta: "/compras", exacta: true, area: "compras" },
+      { nombre: "Proveedores", ruta: "/compras/proveedores", area: "compras" },
+      { nombre: "Inventario y mermas", ruta: "/inventario", area: "inventario" },
     ],
   },
   {
     titulo: "Sala y ventas",
     items: [
-      { nombre: "Carta y canales", ruta: "/carta" },
-      { nombre: "Ventas", ruta: "/ventas" },
+      { nombre: "Carta y canales", ruta: "/carta", area: "carta" },
+      { nombre: "Ventas", ruta: "/ventas", area: "ventas" },
     ],
   },
   {
     titulo: "Economía",
     items: [
-      { nombre: "Resultados", ruta: "/economia", exacta: true },
-      { nombre: "Movimientos", ruta: "/economia/movimientos" },
-      { nombre: "Importar Excel", ruta: "/economia/importar" },
+      { nombre: "Resultados", ruta: "/economia", exacta: true, area: "economia" },
+      { nombre: "Movimientos", ruta: "/economia/movimientos", area: "economia" },
+      { nombre: "Importar Excel", ruta: "/economia/importar", area: "economia" },
     ],
   },
   {
     titulo: "Ajustes",
     items: [
-      { nombre: "Personal", ruta: "/personal" },
-      { nombre: "Energía, impuestos y objetivos", ruta: "/ajustes" },
-      { nombre: "Usuarios", ruta: "/usuarios" },
+      { nombre: "Personal", ruta: "/personal", area: "personal" },
+      { nombre: "Energía, impuestos y objetivos", ruta: "/ajustes", area: "ajustes" },
     ],
   },
+  { titulo: "Próximamente", neutra: true, items: [{ nombre: "Asistente IA" }] },
   {
-    titulo: "Próximamente",
-    items: [{ nombre: "Asistente IA" }],
+    titulo: "Propietario",
+    soloPropietario: true,
+    items: [
+      { nombre: "Administración y equipo", href: "/panel/administracion" },
+      { nombre: "Registro de actividad", ruta: "/actividad" },
+    ],
   },
 ];
 
-export function Navegacion({ rid }: { rid: string }) {
+export function Navegacion({ rid, color, puedeVer, propietario }: { rid: string; color: string; puedeVer: Area[]; propietario: boolean }) {
   const path = usePathname();
   const [abierto, setAbierto] = useState(false);
   const base = `/panel/${rid}`;
+  const visible = (it: Item) => !it.area || (Array.isArray(it.area) ? it.area.some((a) => puedeVer.includes(a)) : puedeVer.includes(it.area));
 
   return (
     <>
       <button
         type="button" onClick={() => setAbierto(!abierto)} aria-expanded={abierto} aria-controls="menu-panel"
-        className="mx-4 mb-4 flex h-10 items-center justify-center rounded-xl bg-crema-2 text-[14px] font-medium lg:hidden"
+        className="mx-4 mb-4 flex h-10 items-center justify-center rounded-xl text-[14px] font-semibold text-white lg:hidden"
+        style={{ background: color }}
       >
         {abierto ? "Cerrar menú" : "Menú"}
       </button>
@@ -75,34 +79,42 @@ export function Navegacion({ rid }: { rid: string }) {
         <Link href="/panel" className="mb-4 flex h-9 items-center gap-2 rounded-lg px-3 text-[14px] font-medium text-grafito hover:bg-tinta/5">
           <span aria-hidden="true">←</span> Universo
         </Link>
-        {SECCIONES.map((s) => (
-          <div key={s.titulo} className="mb-4">
-            <p className="px-3 pb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-niebla">{s.titulo}</p>
-            <ul>
-              {s.items.map((it) => {
-                if (it.ruta === undefined) {
+        {SECCIONES.filter((s) => !s.soloPropietario || propietario).map((s) => {
+          const items = s.items.filter(visible);
+          if (items.length === 0) return null;
+          return (
+            <div key={s.titulo} className={`mb-4 ${s.soloPropietario ? "mt-6 border-t border-linea pt-4" : ""}`}>
+              <p className="flex items-center gap-2 px-3 pb-1.5 text-[12px] font-bold uppercase tracking-[0.1em]" style={{ color: s.neutra ? undefined : color }}>
+                {!s.neutra && <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} aria-hidden="true" />}
+                <span className={s.neutra ? "text-niebla" : ""}>{s.titulo}</span>
+              </p>
+              <ul>
+                {items.map((it) => {
+                  if (it.ruta === undefined && !it.href) {
+                    return (
+                      <li key={it.nombre}>
+                        <span className="flex h-8 items-center rounded-lg px-3 text-[14px] text-niebla/70" aria-disabled="true">{it.nombre}</span>
+                      </li>
+                    );
+                  }
+                  const href = it.href ?? base + it.ruta;
+                  const activo = it.href ? path === it.href : it.exacta ? path === href : path === href || path.startsWith(`${href}/`);
                   return (
                     <li key={it.nombre}>
-                      <span className="flex h-8 items-center rounded-lg px-3 text-[14px] text-niebla/70" aria-disabled="true">{it.nombre}</span>
+                      <Link
+                        href={href} onClick={() => setAbierto(false)} aria-current={activo ? "page" : undefined}
+                        className={`flex h-8 items-center rounded-lg px-3 text-[14px] font-medium transition ${activo ? "text-white" : "text-grafito hover:bg-tinta/5"}`}
+                        style={activo ? { background: color } : undefined}
+                      >
+                        {it.nombre}
+                      </Link>
                     </li>
                   );
-                }
-                const href = base + it.ruta;
-                const activo = it.exacta ? path === href : path === href || path.startsWith(`${href}/`);
-                return (
-                  <li key={it.nombre}>
-                    <Link
-                      href={href} onClick={() => setAbierto(false)} aria-current={activo ? "page" : undefined}
-                      className={`flex h-8 items-center rounded-lg px-3 text-[14px] transition ${activo ? "bg-tinta text-crema" : "text-grafito hover:bg-tinta/5"}`}
-                    >
-                      {it.nombre}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
+                })}
+              </ul>
+            </div>
+          );
+        })}
       </nav>
     </>
   );
@@ -125,10 +137,13 @@ export function SelectorRestaurante({ actual, restaurantes }: { actual: string; 
             const nuevo = e.target.value;
             document.cookie = `uj_restaurante=${nuevo}; path=/; max-age=31536000; samesite=lax`;
             // las páginas de detalle (una receta, una factura) son de un restaurante: se vuelve al listado
-            const resto = path.replace(`/panel/${actual}`, "").split("/").slice(0, 2).join("/");
-            router.push(`/panel/${nuevo}${resto === "/compras" && path.includes("/proveedores") ? "/compras/proveedores" : resto}`);
+            const partes = path.replace(`/panel/${actual}`, "").split("/").filter(Boolean);
+            const listado = partes[0] === "compras" && partes[1] === "proveedores" ? "/compras/proveedores"
+              : partes[0] === "economia" && ["movimientos", "importar"].includes(partes[1] ?? "") ? `/economia/${partes[1]}`
+              : partes[0] ? `/${partes[0]}` : "";
+            router.push(`/panel/${nuevo}${listado}`);
           }}
-          className="select-chevron h-11 w-full appearance-none rounded-xl border border-linea bg-white pl-9 pr-9 text-[15px] font-medium outline-none focus:border-musgo focus:ring-4 focus:ring-musgo/15"
+          className="select-chevron h-11 w-full appearance-none rounded-xl border border-linea bg-white pl-9 pr-9 text-[15px] font-semibold outline-none focus:border-musgo focus:ring-4 focus:ring-musgo/15"
         >
           {restaurantes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FormularioAccion } from "@/components/formulario-accion";
-import { Cabecera, Campo, Insignia, Selector, Tabla, Tarjeta, Vacio, euro } from "@/components/ui";
+import { Cabecera, Campo, Insignia, Selector, Tabla, Tarjeta, Vacio, euro, SinPermiso } from "@/components/ui";
 import { getRestaurante } from "@/lib/contexto";
 import { ESTADO_FACTURA } from "@/lib/compras";
 import { crearFactura } from "./actions";
@@ -15,6 +15,7 @@ export default async function Facturas({ params, searchParams }: { params: Promi
   const r = await getRestaurante(rid);
   if (!r) notFound();
   const { ctx, restaurante } = r;
+  if (!ctx.puedeVer(restaurante, "compras")) return <SinPermiso apartado="las compras" />;
   let q = ctx.supabase.from("purchase_invoices")
     .select("id, number, invoice_date, status, total, tax_total, supplier:suppliers(name), lineas:purchase_lines(line_net, packs, pack_price, discount_pct)")
     .eq("restaurant_id", rid).order("invoice_date", { ascending: false }).limit(100);
@@ -23,7 +24,7 @@ export default async function Facturas({ params, searchParams }: { params: Promi
     q,
     ctx.supabase.from("suppliers").select("id, name").eq("restaurant_id", rid).eq("status", "active").order("name"),
   ]);
-  const puede = ctx.puede(restaurante, "precios");
+  const puede = ctx.puede(restaurante, "compras");
 
   return (
     <>

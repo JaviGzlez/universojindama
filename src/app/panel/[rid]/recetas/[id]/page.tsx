@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AccionRapida, FormularioAccion } from "@/components/formulario-accion";
-import { Campo, Insignia, Tabla, euro } from "@/components/ui";
+import { Campo, Insignia, Tabla, euro, SinPermiso } from "@/components/ui";
 import { getRestaurante } from "@/lib/contexto";
 import { cargarAjustes, cargarImpuestos } from "@/lib/datos";
 import { cargarCatalogo, cargarVersion } from "@/lib/recetas";
@@ -20,6 +20,7 @@ export default async function RecetaDetalle({ params, searchParams }: { params: 
   const r = await getRestaurante(rid);
   if (!r) notFound();
   const { ctx, restaurante } = r;
+  if (!ctx.puedeVer(restaurante, "recetas")) return <SinPermiso apartado="las recetas" />;
   const sb = ctx.supabase;
 
   const { data: receta } = await sb.from("recipes").select("id, restaurant_id, name, kind, category, active_version_id, status, version").eq("id", id).eq("restaurant_id", rid).maybeSingle();
@@ -32,17 +33,30 @@ export default async function RecetaDetalle({ params, searchParams }: { params: 
     sb.from("cost_snapshots").select("id, created_at, reason, status, direct_per_unit, full_per_unit, recipe_version_id").eq("recipe_id", id).order("created_at", { ascending: false }).limit(30),
   ]);
   const lista = versiones ?? [];
+  const usos = receta.kind === "preparation"
+    ? ((await sb.from("recipe_ingredients").select("quantity, unit, recipe_versions!inner(recipe_id, status, recipes!inner(id, name, kind))").eq("sub_recipe_id", id).eq("recipe_versions.status", "active")).data ?? []) as unknown as { quantity: string; unit: string; recipe_versions: { recipes: { id: string; name: string; kind: string } } }[]
+    : [];
+  const carta = receta.kind === "dish"
+    ? ((await sb.from("menu_items").select("id, name, channel_prices(pvp, valid_from, channel:sales_channels(name))").eq("recipe_id", id).eq("status", "active")).data ?? []) as unknown as { id: string; name: string; channel_prices: { pvp: string; valid_from: string; channel: { name: string } | null }[] }[]
+    : [];
   const borrador = lista.find((x) => x.status === "draft");
   const elegida = (verId && lista.find((x) => x.id === verId)) || borrador || lista.find((x) => x.status === "active") || lista[0];
   const version = elegida ? await cargarVersion(sb, elegida.id) : null;
-  const puede = ctx.puede(restaurante, "equipos");
+  const puede = ctx.puede(restaurante, "recetas");
   const esPlato = receta.kind === "dish";
   const factor = esPlato ? 1 : 1000;
   const numVersion = new Map(lista.map((x) => [x.id, x.number]));
 
   return (
     <>
-      <Link href={`/panel/${rid}/recetas`} className="text-[13px] font-medium text-niebla hover:text-tinta">← Recetas</Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link href={`/panel/${rid}/${esPlato ? "recetas" : "elaboraciones"}`} className="text-[13px] font-medium text-niebla hover:text-tinta">← {esPlato ? "Platos" : "Elaboraciones"}</Link>
+        {version && (
+          <Link href={`/panel/${rid}/recetas/${id}/ficha?v=${version.id}`} className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-4 text-[13px] font-medium ring-1 ring-linea hover:bg-crema-2">
+            <span aria-hidden="true">⎙</span> Ficha técnica
+          </Link>
+        )}
+      </div>
       <div className="mb-8 mt-3 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-[13px] font-medium uppercase tracking-[0.12em] text-niebla">{esPlato ? "Plato de venta" : "Elaboración intermedia"}{receta.category ? ` · ${receta.category}` : ""}</p>
@@ -90,11 +104,55 @@ export default async function RecetaDetalle({ params, searchParams }: { params: 
           version={version}
           hayActiva={Boolean(receta.active_version_id)}
           puedeEditar={puede}
+          puedeCrearMaterias={ctx.puede(restaurante, "materias")}
           catalogo={cat}
           impuestosVenta={impuestos.filter((x) => x.kind === "sale").map((x) => ({ id: x.id, name: x.name, rate: x.rate }))}
           decimales={ajustes?.money_decimals ?? 2}
         />
       )}
+
+      <section className="mt-14" aria-labelledby="usos-t">
+        <h2 id="usos-t" className="mb-4 text-[24px] font-semibold tracking-[-0.02em]">Dónde se usa</h2>
+        {receta.kind === "preparation" ? (
+          usos.length === 0 ? (
+            <p className="rounded-[22px] border border-dashed border-linea px-6 py-6 text-center text-[14px] text-niebla">Ninguna receta activa usa esta elaboración todavía.</p>
+          ) : (
+            <ul className="grid gap-2 md:grid-cols-2">
+              {usos.map((u, i) => (
+                <li key={i}>
+                  <Link href={`/panel/${rid}/recetas/${u.recipe_versions.recipes.id}`} className="flex items-center justify-between rounded-2xl bg-white px-5 py-3.5 ring-1 ring-linea hover:bg-crema-2">
+                    <span className="font-medium">{u.recipe_versions.recipes.name}</span>
+                    <span className="text-[13px] tabular-nums text-grafito">{Number(u.quantity).toLocaleString("es-ES")} {u.unit === "unit" ? "ud" : u.unit}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : carta.length === 0 ? (
+          <p className="rounded-[22px] border border-dashed border-linea px-6 py-6 text-center text-[14px] text-niebla">
+            Este plato no está en la carta. Añádelo en <Link href={`/panel/${rid}/carta`} className="font-medium text-musgo hover:underline">Carta y canales</Link> para ver su margen por canal.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {carta.map((m) => {
+              const ult = new Map<string, { pvp: string; valid_from: string }>();
+              for (const p of [...m.channel_prices].sort((a, b) => b.valid_from.localeCompare(a.valid_from))) {
+                const n = p.channel?.name ?? "Canal";
+                if (!ult.has(n)) ult.set(n, p);
+              }
+              return (
+                <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-5 py-3.5 ring-1 ring-linea">
+                  <span className="font-medium">{m.name}</span>
+                  <span className="flex flex-wrap gap-3 text-[13px] text-grafito">
+                    {[...ult.entries()].map(([n, p]) => <span key={n}>{n}: <strong className="tabular-nums">{euro(p.pvp)}</strong></span>)}
+                    {ult.size === 0 && <span className="text-niebla">Sin precio</span>}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
       <section className="mt-14" aria-labelledby="hist-t">
         <div className="mb-4 flex items-baseline justify-between gap-4">

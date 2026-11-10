@@ -2,10 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AccionRapida } from "@/components/formulario-accion";
 import { COLOR_SERIE } from "@/components/graficos";
-import { ListaActividad } from "@/components/lista-actividad";
 import { Mundo, mundoDeSlug } from "@/components/mundo";
 import { Tarjeta } from "@/components/ui";
-import { cargarActividad } from "@/lib/actividad";
 import { getRestaurante } from "@/lib/contexto";
 import { cargarEquipos, cargarImpuestos, cargarIngredientes, cargarPerfiles, cargarTarifas } from "@/lib/datos";
 import { resumenPorRestaurante } from "@/lib/economia";
@@ -21,13 +19,12 @@ export default async function Inicio({ params }: { params: Promise<{ rid: string
   const anio = new Date().getUTCFullYear();
   const hasta = new Date(Date.UTC(anio, new Date().getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
 
-  const [ings, equipos, perfiles, tarifas, impuestos, actividad, resumen, { data: avisos }, { count: nRecetas }, { count: nCarta }] = await Promise.all([
+  const [ings, equipos, perfiles, tarifas, impuestos, resumen, { data: avisos }, { count: nRecetas }, { count: nCarta }] = await Promise.all([
     cargarIngredientes(sb, rid, restaurante.organization_id),
     cargarEquipos(sb, rid),
     cargarPerfiles(sb, rid),
     cargarTarifas(sb, rid),
     cargarImpuestos(sb, rid),
-    cargarActividad(sb, { restaurantes: ctx.restaurants, restauranteId: rid, limite: 10 }),
     resumenPorRestaurante(sb, [rid], `${anio}-01-01`, hasta),
     sb.from("alerts").select("id, title, body, severity, created_at").eq("restaurant_id", rid).is("resolved_at", null).order("created_at", { ascending: false }).limit(6),
     sb.from("recipes").select("id", { count: "exact", head: true }).eq("restaurant_id", rid).eq("status", "active"),
@@ -75,9 +72,11 @@ export default async function Inicio({ params }: { params: Promise<{ rid: string
         </section>
       )}
 
-      <div className="mt-8">
-        <ResumenRestaurante meses={resumen.get(rid) ?? []} color={COLOR_SERIE[mundo]} />
-      </div>
+      {ctx.puedeVer(restaurante, "economia") && (
+        <div className="mt-8">
+          <ResumenRestaurante meses={resumen.get(rid) ?? []} color={COLOR_SERIE[mundo]} />
+        </div>
+      )}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <Tarjeta>
@@ -106,11 +105,12 @@ export default async function Inicio({ params }: { params: Promise<{ rid: string
         </Tarjeta>
 
         <div className="grid gap-4">
-          {[
-            { t: "Recetas", d: "Escandallos guardados con versiones e histórico de costes.", h: `${base}/recetas` },
-            { t: "Facturas", d: "Registra compras: actualizan precios, inventario y escandallos.", h: `${base}/compras` },
-            { t: "Resultados", d: "Ingresos, compras, personal y gastos por mes.", h: `${base}/economia` },
-          ].map((x) => (
+          {([
+            { t: "Platos y elaboraciones", d: "Fichas técnicas con versiones, procesos e histórico de costes.", h: `${base}/recetas`, a: "recetas" },
+            { t: "Escandallo rápido", d: "Calcula cualquier plato al momento y guárdalo como receta.", h: `${base}/escandallo`, a: "materias" },
+            { t: "Facturas", d: "Registra compras: actualizan precios, inventario y escandallos.", h: `${base}/compras`, a: "compras" },
+            { t: "Resultados", d: "Ingresos, compras, personal y gastos por mes.", h: `${base}/economia`, a: "economia" },
+          ] as const).filter((x) => ctx.puedeVer(restaurante, x.a)).map((x) => (
             <Link key={x.t} href={x.h} className="group rounded-[22px] bg-white p-5 ring-1 ring-linea transition hover:-translate-y-0.5">
               <p className="flex items-center justify-between text-[16px] font-semibold">
                 {x.t} <span className="text-niebla transition group-hover:translate-x-1 group-hover:text-tinta" aria-hidden="true">→</span>
@@ -120,18 +120,6 @@ export default async function Inicio({ params }: { params: Promise<{ rid: string
           ))}
         </div>
       </div>
-
-      <section className="mt-14" aria-labelledby="act-t">
-        <div className="mb-4 flex items-baseline justify-between">
-          <h2 id="act-t" className="text-[24px] font-semibold tracking-[-0.02em]">Actividad reciente</h2>
-          <Link href={`${base}/actividad`} className="text-[14px] font-medium text-musgo hover:underline">Ver toda</Link>
-        </div>
-        {actividad.items.length === 0 ? (
-          <p className="rounded-[22px] border border-dashed border-linea px-6 py-8 text-center text-[14px] text-niebla">Todavía no hay actividad en {restaurante.name}.</p>
-        ) : (
-          <ListaActividad items={actividad.items} tz={restaurante.timezone} agruparPorDia={false} mostrarRestaurante={false} />
-        )}
-      </section>
     </>
   );
 }

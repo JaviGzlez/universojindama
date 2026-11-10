@@ -101,3 +101,32 @@ export const numero = (v: string | number | null | undefined, max = 2) => {
   if (!Number.isFinite(n)) return "—";
   return new Intl.NumberFormat("es-ES", { maximumFractionDigits: max }).format(n);
 };
+
+export function SinPermiso({ apartado }: { apartado: string }) {
+  return (
+    <div className="mx-auto max-w-md py-24 text-center">
+      <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-niebla">Sin permiso</p>
+      <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.02em]">No tienes acceso a {apartado}</h1>
+      <p className="mt-3 text-[15px] text-niebla">Pídeselo al propietario del grupo si lo necesitas.</p>
+    </div>
+  );
+}
+
+const LISTA_ALERGENOS = ["gluten", "crustáceos", "huevo", "pescado", "cacahuetes", "soja", "leche", "frutos de cáscara", "apio", "mostaza", "sésamo", "sulfitos", "altramuces", "moluscos"];
+
+/** Casillas de los 14 alérgenos de declaración obligatoria. */
+export function CasillasAlergenos({ marcados = [], className = "" }: { marcados?: string[]; className?: string }) {
+  return (
+    <fieldset className={className}>
+      <legend className="mb-2 text-[13px] font-medium text-grafito">Alérgenos (según la ficha del proveedor)</legend>
+      <div className="flex flex-wrap gap-2">
+        {LISTA_ALERGENOS.map((a) => (
+          <label key={a} className="cursor-pointer">
+            <input type="checkbox" name="allergens" value={a} defaultChecked={marcados.includes(a)} className="peer sr-only" />
+            <span className="inline-flex h-8 items-center rounded-full bg-crema-2 px-3 text-[13px] capitalize text-grafito ring-terracota transition peer-checked:bg-terracota peer-checked:text-white peer-focus-visible:ring-2">{a}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}

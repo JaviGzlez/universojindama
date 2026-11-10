@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { AccionRapida, FormularioAccion } from "@/components/formulario-accion";
-import { Cabecera, Campo, Selector, Tabla, Tarjeta, Vacio, claseInput, euro, numero } from "@/components/ui";
+import { Cabecera, Campo, Selector, Tabla, Tarjeta, Vacio, claseInput, euro, numero, SinPermiso } from "@/components/ui";
 import { getRestaurante } from "@/lib/contexto";
 import { borrarVenta, importarVentas, registrarVenta } from "./actions";
 
@@ -12,6 +12,7 @@ export default async function Ventas({ params, searchParams }: { params: Promise
   const r = await getRestaurante(rid);
   if (!r) notFound();
   const { ctx, restaurante } = r;
+  if (!ctx.puedeVer(restaurante, "ventas")) return <SinPermiso apartado="las ventas" />;
   const sb = ctx.supabase;
   const ahora = new Date();
   const m = mes && /^\d{4}-\d{2}$/.test(mes) ? mes : ahora.toISOString().slice(0, 7);
@@ -35,7 +36,7 @@ export default async function Ventas({ params, searchParams }: { params: Promise
   }
   const ranking = [...porPlato.entries()].sort((a, b) => b[1].cantidad - a[1].cantidad);
   const maxCant = Math.max(1, ...ranking.map((x) => x[1].cantidad));
-  const puede = ctx.puede(restaurante, "ajustes");
+  const puede = ctx.puede(restaurante, "ventas");
   const mesTxt = new Date(`${m}-01T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", year: "numeric", timeZone: "UTC" });
   const mover = (d: number) => new Date(Date.UTC(y, mo - 1 + d, 1)).toISOString().slice(0, 7);
 

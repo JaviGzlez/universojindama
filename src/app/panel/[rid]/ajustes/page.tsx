@@ -18,8 +18,8 @@ export default async function Ajustes({ params }: { params: Promise<{ rid: strin
   const [tarifas, impuestos, ajustes] = await Promise.all([
     cargarTarifas(ctx.supabase, rid), cargarImpuestos(ctx.supabase, rid), cargarAjustes(ctx.supabase, rid),
   ]);
-  const puedeTarifas = ctx.puede(restaurante, "tarifas");
-  const puedeImpuestos = ctx.puede(restaurante, "impuestos");
+  const puedeTarifas = ctx.puede(restaurante, "ajustes");
+  const puedeImpuestos = ctx.puede(restaurante, "ajustes");
   const puedeAjustes = ctx.puede(restaurante, "ajustes");
 
   return (

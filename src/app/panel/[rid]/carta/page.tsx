@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AccionRapida, FormularioAccion } from "@/components/formulario-accion";
-import { Cabecera, Campo, Insignia, Selector, Tarjeta, Vacio, euro, numero } from "@/components/ui";
+import { Cabecera, Campo, Insignia, Selector, Tarjeta, Vacio, euro, numero, SinPermiso } from "@/components/ui";
 import { getRestaurante } from "@/lib/contexto";
 import { cargarAjustes, cargarImpuestos } from "@/lib/datos";
 import { calcularVersion, cargarCatalogo, cargarVersion, type Version } from "@/lib/recetas";
@@ -17,6 +17,7 @@ export default async function Carta({ params }: { params: Promise<{ rid: string 
   const r = await getRestaurante(rid);
   if (!r) notFound();
   const { ctx, restaurante } = r;
+  if (!ctx.puedeVer(restaurante, "carta")) return <SinPermiso apartado="la carta" />;
   const sb = ctx.supabase;
   const hoy = new Date().toISOString().slice(0, 10);
   const [{ data: canales }, { data: platos }, { data: precios }, { cat, recetas }, impuestos, ajustes] = await Promise.all([
@@ -27,8 +28,8 @@ export default async function Carta({ params }: { params: Promise<{ rid: string 
     cargarImpuestos(sb, rid),
     cargarAjustes(sb, rid),
   ]);
-  const puedeCanal = ctx.puede(restaurante, "ajustes");
-  const puedePlato = ctx.puede(restaurante, "equipos") || puedeCanal;
+  const puedeCanal = ctx.puede(restaurante, "carta");
+  const puedePlato = ctx.puede(restaurante, "carta");
   const objetivo = ajustes?.targets?.target_food_cost_pct ?? null;
   const platosReceta = recetas.filter((x) => x.kind === "dish");
   const ivaVenta = impuestos.find((x) => x.kind === "sale");

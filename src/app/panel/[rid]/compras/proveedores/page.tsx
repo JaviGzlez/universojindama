@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { AccionRapida, FormularioAccion } from "@/components/formulario-accion";
-import { Cabecera, Campo, Selector, Tarjeta, Vacio, euro, numero } from "@/components/ui";
+import { Cabecera, Campo, Selector, Tarjeta, Vacio, euro, numero, SinPermiso } from "@/components/ui";
 import { getRestaurante } from "@/lib/contexto";
 import { cargarIngredientes } from "@/lib/datos";
 import { archivar } from "../../actions";
@@ -13,6 +13,7 @@ export default async function Proveedores({ params }: { params: Promise<{ rid: s
   const r = await getRestaurante(rid);
   if (!r) notFound();
   const { ctx, restaurante } = r;
+  if (!ctx.puedeVer(restaurante, "compras")) return <SinPermiso apartado="los proveedores" />;
   const sb = ctx.supabase;
   const [{ data: proveedores }, { data: productos }, ings] = await Promise.all([
     sb.from("suppliers").select("id, name, tax_id, contact, phone, email, version").eq("restaurant_id", rid).eq("status", "active").order("name"),
@@ -20,7 +21,7 @@ export default async function Proveedores({ params }: { params: Promise<{ rid: s
     cargarIngredientes(sb, rid, restaurante.organization_id),
   ]);
   const ing = new Map(ings.map((i) => [i.id, i.name]));
-  const puede = ctx.puede(restaurante, "precios");
+  const puede = ctx.puede(restaurante, "compras");
 
   return (
     <>

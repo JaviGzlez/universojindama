@@ -4,8 +4,10 @@ Plataforma de costes y escandallos para restaurantes: cada local introduce sus d
 
 **Incluye (fases 1 a 5):**
 
-- **Universo:** portada de grupo con los tres mundos en movimiento; al tocar uno (o el grupo) se ven sus gráficas animadas de ingresos, resultado, compras, personal y gastos, KPIs y comparativa, y la actividad reciente al final.
-- **Acceso:** usuario y contraseña sin correo; el propietario crea las cuentas, roles y restaurantes de cada persona. Actividad visible para todo el equipo.
+- **Universo:** portada de grupo con los tres mundos en movimiento; al tocar uno (o el grupo) se ven sus gráficas animadas de ingresos, resultado, compras, personal y gastos, KPIs y comparativa, Doble clic en un restaurante (o el botón «Entrar en…») abre su panel.
+- **Acceso:** usuario y contraseña sin correo; el propietario crea las cuentas en **Administración**, elige a qué restaurantes accede cada persona y marca por áreas (recetas, compras y facturas, inventario, carta, ventas, economía…) si no ve, solo ve o edita. El **registro de actividad** con cada movimiento solo lo ve el propietario.
+- **Recetas y elaboraciones:** composición y coste, proceso paso a paso (tiempos, temperatura, equipo, puntos críticos), conservación, vida útil, presentación, alérgenos derivados y ficha técnica imprimible. *Dónde se usa* conecta elaboraciones, platos y carta.
+- **Materias primas conectadas:** cada una tiene su ficha con evolución del precio, proveedores, últimas compras, recetas que la usan, existencias y mermas. Equipos y consumibles muestran coste por hora y en qué recetas se usan.
 - **Cocina:** materias primas con histórico de precios, equipos, personal, tarifas, impuestos y consumibles; **recetas y elaboraciones** con versiones (borrador → activa → sustituida), elaboraciones dentro de recetas sin duplicar costes, bloqueo de referencias circulares, **histórico de costes** que nunca se reescribe y escandallo rápido.
 - **Compras:** proveedores, productos de proveedor (formato y marca) y **facturas** borrador → validada → registrada; el registro es transaccional e idempotente, aplica precios e inventario y **recalcula las recetas afectadas** con avisos si el coste cambia más del umbral.
 - **Sala:** canales (sala, recogida, reparto, plataformas) con comisiones y envases; carta con precio por canal y vigencia, margen de contribución y % de materia prima frente a objetivo; ventas por plato manuales o por CSV del TPV (sin duplicar).
@@ -45,6 +47,10 @@ git push -u origin main
    6. `supabase/migrations/20261104000006_compras.sql`
    7. `supabase/migrations/20261104000007_carta_ventas_inventario.sql`
    8. `supabase/migrations/20261104000008_economia.sql`
+   9. `supabase/migrations/20261110000009_permisos.sql` (permisos por áreas; actividad solo para el propietario)
+   10. `supabase/migrations/20261110000010_recetas_ficha.sql` (pasos de elaboración, tiempos, conservación)
+
+   Atajos para un proyecto ya creado: `supabase/actualizar-fases-2-a-5.sql` (migraciones 5–8) y `supabase/actualizar-permisos-y-fichas.sql` (9–10).
 
    Todas a partir de la 4 se pueden volver a ejecutar sin problema.
 
@@ -82,10 +88,10 @@ Se entra con **usuario y contraseña**, sin correo ni confirmación. Supabase ex
    update public.profiles set display_name = 'Javi' where email = 'admin@usuarios.universojindama.com';
    ```
 
-3. Entra en `/acceso` con el usuario `admin`. En **Usuarios** crea al resto (nombre, usuario, contraseña, rol y restaurantes). Desde ahí también cambias contraseñas o retiras accesos.
+3. Entra en `/acceso` con el usuario `admin`. En **Administración** (arriba a la derecha) crea al resto: nombre, usuario, contraseña, perfil, restaurantes y casillas por área. Desde ahí también cambias contraseñas o retiras accesos.
 4. Recomendado: en Supabase → **Authentication → Sign In / Providers**, desactiva **Allow new users to sign up** y **Confirm email**. El panel sigue pudiendo crear usuarios.
 
-**Actividad:** todos los miembros ven lo que se hace en los restaurantes a los que tienen acceso (quién, qué y cuándo), en el apartado *Actividad* y en el Inicio.
+**Actividad:** cada movimiento (quién, qué y cuándo) queda registrado. Solo el propietario lo ve, en *Administración → Registro de actividad* y al final del menú de cada restaurante.
 
 Roles: `owner` (propietario), `admin`, `kitchen` (cocina), `purchasing` (compras), `accounting` (administración), `viewer` (consulta). Con `restaurant_id` nulo, el rol aplica a todos los restaurantes de la organización.
 
@@ -121,7 +127,8 @@ src/app/acceso/           Login y registro
 src/app/panel/page.tsx    Universo: portada de grupo con gráficas
 src/app/panel/[rid]/      Panel por restaurante: inicio, actividad, recetas, escandallo,
                           materias primas, equipos, compras, inventario, carta, ventas,
-                          economía (resultados, movimientos, importar Excel), ajustes, usuarios
+                          economía (resultados, movimientos, importar Excel), ajustes
+src/app/panel/administracion/  Equipo, permisos por áreas y registro de actividad (propietario)
 src/lib/importar/         Lector del Excel de analítica (puro, probado)
 src/app/api/v1/           API REST
 docs/api.md               Referencia de la API

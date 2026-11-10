@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { BarrasComparadas, Cifra, COLOR_SERIE, GraficoMensual, type Punto } from "@/components/graficos";
 import { Mundo, type MundoId } from "@/components/mundo";
@@ -47,7 +48,12 @@ const TAM: Record<MundoId, string> = {
 const FLOTA: Record<MundoId, string> = { jindama: "flotar-a", jaleo: "flotar-b", juye: "flotar-c" };
 
 export function Universo({ restaurantes, anio }: { restaurantes: RestauranteUniverso[]; anio: number }) {
+  const router = useRouter();
   const [sel, setSel] = useState<string>("grupo");
+  const entrar = (id: string) => {
+    document.cookie = `uj_restaurante=${id}; path=/; max-age=31536000; samesite=lax`;
+    router.push(`/panel/${id}`);
+  };
   const [metrica, setMetrica] = useState<Metrica>("ingresos");
 
   const elegido = restaurantes.find((r) => r.id === sel);
@@ -86,7 +92,8 @@ export function Universo({ restaurantes, anio }: { restaurantes: RestauranteUniv
         </button>
         {restaurantes.map((r) => (
           <button
-            key={r.id} type="button" onClick={() => setSel(r.id)} aria-pressed={sel === r.id}
+            key={r.id} type="button" onClick={() => setSel(r.id)} onDoubleClick={() => entrar(r.id)} aria-pressed={sel === r.id}
+            title={`Clic: ver cifras de ${r.nombre} · Doble clic: entrar`}
             className={`group absolute z-10 flex flex-col items-center gap-2 ${POS[r.mundo]} ${FLOTA[r.mundo]}`}
           >
             <span className={`block rounded-full transition duration-500 ${sel === r.id ? "scale-110 ring-4 ring-offset-4 ring-offset-crema" : sel === "grupo" ? "" : "opacity-60 saturate-50 group-hover:opacity-100 group-hover:saturate-100"}`}
@@ -107,6 +114,11 @@ export function Universo({ restaurantes, anio }: { restaurantes: RestauranteUniv
             {nombreMetrica} <span className="font-serif font-normal italic">{elegido ? `en ${elegido.nombre}` : "del grupo"}</span>
             <span className="ml-2 text-[15px] font-normal text-niebla">{anio}</span>
           </h2>
+          {elegido && (
+            <button type="button" onClick={() => entrar(elegido.id)} className="-mt-2 h-9 rounded-full bg-tinta px-5 text-[13px] font-medium text-crema hover:bg-grafito">
+              Entrar en {elegido.nombre} →
+            </button>
+          )}
           <div className="flex flex-wrap justify-center gap-2" role="group" aria-label="Métrica">
             {METRICAS.map((m) => (
               <button

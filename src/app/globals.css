@@ -162,3 +162,11 @@ body {
 .orbita-pausa:hover .orbita-contra,
 .orbita-pausa:focus-within .orbita-giro,
 .orbita-pausa:focus-within .orbita-contra { animation-play-state: paused; }
+
+/* Impresión: solo el contenido (fichas técnicas) */
+@media print {
+  aside, .no-imprimir { display: none !important; }
+  body { background: #fff; }
+  main { padding: 0 !important; }
+  @page { margin: 14mm; }
+}

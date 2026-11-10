@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FormularioAccion } from "@/components/formulario-accion";
-import { Cabecera, Campo, Insignia, Tabla, Tarjeta } from "@/components/ui";
+import { Cabecera, Campo, Insignia, Tabla, Tarjeta, SinPermiso } from "@/components/ui";
 import { getRestaurante } from "@/lib/contexto";
 import { subirExcel } from "../actions";
 
@@ -14,6 +14,7 @@ export default async function Importar({ params }: { params: Promise<{ rid: stri
   const r = await getRestaurante(rid);
   if (!r) notFound();
   const { ctx, restaurante } = r;
+  if (!ctx.puedeVer(restaurante, "economia")) return <SinPermiso apartado="economía" />;
   const { data: jobs } = await ctx.supabase.from("import_jobs")
     .select("id, file_name, year, status, rows_total, rows_error, created_at, applied_at")
     .eq("organization_id", restaurante.organization_id).order("created_at", { ascending: false }).limit(20);

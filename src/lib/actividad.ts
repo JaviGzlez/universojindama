@@ -75,7 +75,7 @@ const REF_UNIDAD: Record<string, { f: number; u: string }> = { g: { f: 1000, u: 
 
 export async function cargarActividad(
   sb: SupabaseClient,
-  opciones: { restaurantes: Restaurante[]; restauranteId?: string; quien?: string; antes?: string; limite?: number },
+  opciones: { restaurantes: Restaurante[]; restauranteId?: string; soloRestaurante?: boolean; quien?: string; antes?: string; limite?: number; todo?: boolean },
 ): Promise<{ items: Actividad[]; siguiente: string | null }> {
   const limite = opciones.limite ?? 60;
   let q = sb.from("audit_events")
@@ -83,8 +83,10 @@ export async function cargarActividad(
     .order("occurred_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(limite + 1);
-  if (opciones.restauranteId) q = q.or(`restaurant_id.eq.${opciones.restauranteId},restaurant_id.is.null`);
-  q = q.in("table_name", TABLAS_ACTIVIDAD);
+  if (opciones.restauranteId) {
+    q = opciones.soloRestaurante ? q.eq("restaurant_id", opciones.restauranteId) : q.or(`restaurant_id.eq.${opciones.restauranteId},restaurant_id.is.null`);
+  }
+  if (!opciones.todo) q = q.in("table_name", TABLAS_ACTIVIDAD);
   if (opciones.quien) q = q.eq("actor_id", opciones.quien);
   if (opciones.antes) q = q.lt("occurred_at", opciones.antes);
   const { data } = await q;
@@ -120,7 +122,7 @@ export async function cargarActividad(
   for (const e of eventos) {
     if (e.table_name === "restaurant_settings" && e.action === "INSERT") continue;
     if (e.table_name === "memberships" && e.action === "DELETE" && altas.has(`${e.occurred_at}|${s(e.old_data?.user_id)}`)) continue;
-    const r = describir(e, { nombre, ing, rest, receta });
+    const r = describir(e, { nombre, ing, rest, receta }) ?? (opciones.todo ? generico(e) : null);
     if (!r) continue;
     items.push({
       id: e.id,
@@ -261,4 +263,26 @@ export function diaDe(iso: string, tz: string) {
 
 export function horaDe(iso: string, tz: string) {
   return new Intl.DateTimeFormat("es-ES", { timeZone: tz, hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+}
+
+const TABLA: Record<string, string> = {
+  recipe_ingredients: "los ingredientes de una receta", recipe_equipment_usage: "los equipos de una receta",
+  recipe_labor_usage: "el personal de una receta", recipe_consumables: "los consumibles de una receta", recipe_steps: "los pasos de una receta",
+  recipe_versions: "una versión de receta", purchase_lines: "una línea de factura", stock_count_lines: "una línea de recuento",
+  cost_snapshots: "una fotografía de coste", alerts: "un aviso", restaurant_settings: "los ajustes", memberships: "un acceso",
+  financial_entries: "un movimiento económico", sales: "una venta", ingredient_prices: "un precio",
+};
+
+/** Descripción genérica para el registro completo (cualquier tabla). */
+function generico(e: Evento): Pick<Actividad, "texto" | "detalle" | "tipo"> {
+  const d = e.new_data ?? e.old_data ?? {};
+  const verbo = e.action === "INSERT" ? "añadió" : e.action === "DELETE" ? "borró" : "modificó";
+  const que = TABLA[e.table_name] ?? e.table_name.replace(/_/g, " ");
+  const etiqueta = s(d.name ?? d.description ?? d.category ?? d.title ?? "");
+  const cambios = e.action === "UPDATE" ? Object.keys(e.new_data ?? {}).filter((k) => !IGNORAR.has(k) && JSON.stringify((e.old_data ?? {})[k]) !== JSON.stringify((e.new_data ?? {})[k])).map((k) => CAMPOS[k] ?? k) : [];
+  return {
+    texto: `${verbo} ${que}${etiqueta ? ` «${etiqueta}»` : ""}`,
+    detalle: cambios.length ? `Cambió: ${cambios.join(", ")}` : null,
+    tipo: e.action === "DELETE" ? "archivar" : e.action === "INSERT" ? "crear" : "cambiar",
+  };
 }

@@ -75,6 +75,7 @@ await as(A, async () => {
   const shared = await tryQ(`insert into ingredients (organization_id, name, base_unit) values ('${jaleo.organization_id}','Sal','g')`);
   check('crea ingrediente compartido', shared.ok);
   check('asigna acceso a C en Jindama', (await tryQ(`select public.set_member_access('${jaleo.organization_id}','${C}','viewer',array['${jindama.id}']::uuid[])`)).ok);
+  check('rechaza apartado desconocido', !(await tryQ(`select public.set_member_access('${jaleo.organization_id}','${C}','viewer',null,'{"cohetes":"write"}'::jsonb)`)).ok);
   check('C queda con 1 acceso', (await db.query(`select * from memberships where user_id='${C}'`)).rows.length === 1);
   check('cambia a todo el grupo', (await tryQ(`select public.set_member_access('${jaleo.organization_id}','${C}','kitchen',null)`)).ok
     && (await db.query(`select restaurant_id from memberships where user_id='${C}'`)).rows[0].restaurant_id === null);
@@ -100,9 +101,7 @@ await as(B, async () => {
   check('no crea en Jindama', !(await tryQ(`insert into ingredients (organization_id, restaurant_id, name, base_unit) values ('${jaleo.organization_id}','${jindama.id}','X','g')`)).ok);
   check('no crea precio en Jindama', !(await tryQ(`insert into ingredient_prices (restaurant_id, ingredient_id, price_per_base_unit) values ('${jindama.id}','${i.r.rows[0].id}',1)`)).ok);
   check('no crea impuestos (rol administración)', !(await tryQ(`insert into tax_rates (restaurant_id, name, kind, rate) values ('${jaleo.id}','IVA','sale',0.1)`)).ok);
-  const act = (await db.query('select restaurant_id, table_name from audit_events')).rows;
-  check('ve actividad de Jaleo', act.some((r) => r.restaurant_id === jaleo.id));
-  check('no ve actividad de Jindama', !act.some((r) => r.restaurant_id === jindama.id));
+  check('no ve el registro de actividad (solo propietario)', (await db.query('select * from audit_events')).rows.length === 0);
   check('ve el nombre de Javi', (await db.query(`select display_name from profiles where user_id='${A}'`)).rows.length === 1);
   check('no ve el perfil de C', (await db.query(`select * from profiles where user_id='${C}'`)).rows.length === 0);
   check('no cambia el nombre de Javi', (await db.query(`update profiles set display_name='X' where user_id='${A}' returning 1`)).rows.length === 0);
@@ -142,6 +141,10 @@ await as(A, async () => {
   const ver2 = await one(`select version from recipe_versions where id='${vPrep2.v}'`);
   const sv = await tryQ(`select public.save_recipe_draft('${vPrep2.v}', ${ver2.version}, '{"yield_quantity":"900","yield_unit":"g","ingredientes":[{"ingredient_id":"${ing.id}","quantity":"1000","unit":"g"}]}'::jsonb) n`);
   check('guarda borrador completo', sv.ok && Number((await one(`select quantity from recipe_ingredients where version_id='${vPrep2.v}'`)).quantity) === 1000);
+  const ver3 = await one(`select version from recipe_versions where id='${vPrep2.v}'`);
+  const sv2 = await tryQ(`select public.save_recipe_draft('${vPrep2.v}', ${ver3.version}, '{"yield_quantity":"900","yield_unit":"g","cook_minutes":"45","shelf_life_hours":"72","storage":"Cámara 0–4 °C","extra_allergens":["sulfitos"],"ingredientes":[{"ingredient_id":"${ing.id}","quantity":"1000","unit":"g"}],"pasos":[{"description":"Sofreír","minutes":"10","temperature_c":"120","is_critical":false},{"description":"Abatir","minutes":"90","temperature_c":"3","is_critical":true}]}'::jsonb)`);
+  check('guarda ficha y pasos', sv2.ok && Number((await one(`select count(*) n from recipe_steps where version_id='${vPrep2.v}'`)).n) === 2
+    && (await one(`select extra_allergens from recipe_versions where id='${vPrep2.v}'`)).extra_allergens[0] === 'sulfitos');
   check('rechaza versión desfasada', !(await tryQ(`select public.save_recipe_draft('${vPrep2.v}', ${ver2.version}, '{}'::jsonb)`)).ok);
   check('nueva versión copia líneas', Number((await one(`select count(*) n from recipe_ingredients where version_id='${vPrep2.v}'`)).n) === 1);
   const prep2 = await one(`insert into recipes (restaurant_id, name, kind) values ('${R}','Base','preparation') returning id`);
@@ -202,6 +205,24 @@ await as(B, async () => {
   check('no crea gastos (rol administración)', !(await tryQ(`insert into financial_entries (restaurant_id, entry_date, kind, category, amount) values ('${jaleo.id}','2026-10-05','expense','Luz',1)`)).ok);
   check('no ve importaciones', (await db.query('select * from import_jobs')).rows.length === 0);
   check('no crea recetas en Jindama', !(await tryQ(`insert into recipes (restaurant_id, name, kind) values ('${jindama.id}','X','dish')`)).ok);
+});
+
+console.log('Permisos con casillas (C: solo Jaleo, recetas editar, compras ver, resto no)');
+await db.exec(`begin; set local role authenticated; select set_config('request.jwt.claim.sub', '${A}', true);
+  select public.set_member_access('${jaleo.organization_id}','${C}','viewer',array['${jaleo.id}']::uuid[],
+    '{"recetas":"write","compras":"read","materias":"none","equipos":"none","inventario":"none","carta":"none","ventas":"none","economia":"none","personal":"none","ajustes":"none"}'::jsonb);
+  insert into suppliers (restaurant_id, name) values ('${jaleo.id}','Proveedor Jaleo');
+  insert into financial_entries (restaurant_id, entry_date, kind, category, amount) values ('${jaleo.id}','2026-11-02','expense','Luz',10);
+  commit;`);
+await as(C, async () => {
+  check('ve solo Jaleo', (await db.query('select slug from restaurants')).rows.map((r) => r.slug).join() === 'jaleo');
+  check('crea receta (editar)', (await tryQ(`insert into recipes (restaurant_id, name, kind) values ('${jaleo.id}','Gazpacho','dish')`)).ok);
+  check('ve proveedores (ver)', (await db.query('select * from suppliers')).rows.length >= 1);
+  check('no crea proveedores (solo ver)', !(await tryQ(`insert into suppliers (restaurant_id, name) values ('${jaleo.id}','Y')`)).ok);
+  check('no ve economía (no)', (await db.query('select * from financial_entries')).rows.length === 0);
+  check('no crea materias primas (no)', !(await tryQ(`insert into ingredients (organization_id, restaurant_id, name, base_unit) values ('${jaleo.organization_id}','${jaleo.id}','Z','g')`)).ok);
+  check('ve materias primas para escandallar', (await tryQ('select * from ingredients')).ok);
+  check('no ve actividad', (await db.query('select * from audit_events')).rows.length === 0);
 });
 
 console.log(fails ? `${fails} fallos` : 'Todo correcto');

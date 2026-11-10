@@ -84,7 +84,6 @@ const Ingrediente = z.object({
   density: decimalOpcional("debe ser mayor que 0", { gt: 0 }),
   unit_weight_g: decimalOpcional("debe ser mayor que 0", { gt: 0 }),
   unit_volume_ml: decimalOpcional("debe ser mayor que 0", { gt: 0 }),
-  allergens: textoOpcional(300),
   source: textoOpcional(200),
 });
 
@@ -105,7 +104,7 @@ export async function crearIngrediente(_: ResultadoAccion, form: FormData): Prom
     density_g_per_ml: d.density,
     unit_weight_g: d.unit_weight_g,
     unit_volume_ml: d.unit_volume_ml,
-    allergens: d.allergens ? d.allergens.split(",").map((a) => a.trim()).filter(Boolean) : [],
+    allergens: form.getAll("allergens").map(String).filter(Boolean),
     source: d.source,
   });
   if (error) return errorBD(error);
@@ -344,4 +343,36 @@ export async function resolverAviso(_: ResultadoAccion, form: FormData): Promise
     .eq("id", r.data.id).eq("restaurant_id", r.data.restaurant_id);
   if (error) return errorBD(error);
   return hecho(r.data.restaurant_id, "Aviso marcado como visto.");
+}
+
+// ------------------------------------------------- editar materia prima (ficha)
+const EditarIngrediente = z.object({
+  restaurant_id: uuid,
+  id: uuid,
+  version: z.coerce.number().int(),
+  name: texto(),
+  category: textoOpcional(100),
+  yield_pct: decimal("debe estar entre 0 (excluido) y 100 %", { gt: 0, max: 100 }),
+  density: decimalOpcional("debe ser mayor que 0", { gt: 0 }),
+  unit_weight_g: decimalOpcional("debe ser mayor que 0", { gt: 0 }),
+  unit_volume_ml: decimalOpcional("debe ser mayor que 0", { gt: 0 }),
+  storage: textoOpcional(200),
+  source: textoOpcional(200),
+});
+
+export async function editarIngrediente(_: ResultadoAccion, form: FormData): Promise<ResultadoAccion> {
+  const r = leer(EditarIngrediente, form);
+  if (!r.ok) return r.res;
+  const { restaurant_id, id, version, yield_pct, density, ...d } = r.data;
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("ingredients").update({
+    ...d, density_g_per_ml: density, yield_ratio: new D(yield_pct).div(100).toString(),
+    allergens: form.getAll("allergens").map(String).filter(Boolean),
+  }).eq("id", id).eq("version", version).select("id, organization_id");
+  if (error) return errorBD(error);
+  if (!data?.length) return { ok: false, mensaje: "Otra persona la ha cambiado o no tienes permiso. Recarga la página.", t: Date.now() };
+  // el rendimiento o la densidad cambian el coste de las recetas
+  await recalcularDependientes(supabase, restaurant_id, data[0].organization_id, [id]);
+  revalidatePath(`/panel/${restaurant_id}/ingredientes/${id}`);
+  return hecho(restaurant_id, "Materia prima guardada. Recetas afectadas recalculadas.", "/ingredientes");
 }

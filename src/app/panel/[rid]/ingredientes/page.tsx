@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { AccionRapida, FormularioAccion } from "@/components/formulario-accion";
-import { Cabecera, Campo, Insignia, Selector, Tabla, Tarjeta, Vacio, euro, numero } from "@/components/ui";
+import { Cabecera, CasillasAlergenos, Campo, Insignia, Selector, Tabla, Tarjeta, Vacio, euro, numero } from "@/components/ui";
+import Link from "next/link";
 import { getRestaurante } from "@/lib/contexto";
 import { cargarIngredientes } from "@/lib/datos";
 import { archivar, crearIngrediente, registrarPrecio } from "../actions";
@@ -16,15 +17,15 @@ export default async function Ingredientes({ params }: { params: Promise<{ rid: 
   if (!r) notFound();
   const { ctx, restaurante } = r;
   const ingredientes = await cargarIngredientes(ctx.supabase, rid, restaurante.organization_id);
-  const puedeCrear = ctx.puede(restaurante, "ingredientes");
-  const puedePrecio = ctx.puede(restaurante, "precios");
+  const puedeCrear = ctx.puede(restaurante, "materias");
+  const puedePrecio = ctx.puede(restaurante, "materias") || ctx.puede(restaurante, "compras");
   const propietario = ctx.esPropietario(restaurante.organization_id);
 
   return (
     <>
       <Cabecera
         titulo="Materias primas"
-        subtitulo={`Ingredientes de ${restaurante.name} y del catálogo compartido. Cada restaurante guarda sus propios precios, con histórico.`}
+        subtitulo={`Ingredientes de ${restaurante.name} y del catálogo compartido. Cada restaurante guarda sus propios precios, con histórico. Abre una materia prima para ver su evolución de precio, proveedores, recetas que la usan, existencias y mermas.`}
       />
 
       {puedeCrear && (
@@ -45,13 +46,13 @@ export default async function Ingredientes({ params }: { params: Promise<{ rid: 
               <Campo label="Densidad" name="density" inputMode="decimal" unidad="g/ml" ayuda="Solo si conviertes entre peso y volumen." />
               <Campo label="Peso por unidad" name="unit_weight_g" inputMode="decimal" unidad="g" ayuda="Solo si usas unidades." />
               <Campo label="Volumen por unidad" name="unit_volume_ml" inputMode="decimal" unidad="ml" />
-              <Campo label="Alérgenos declarados" name="allergens" placeholder="gluten, huevo" className="sm:col-span-2" ayuda="Separados por comas, según ficha del proveedor." />
               <Campo label="Fuente del dato" name="source" placeholder="Ficha técnica, medición propia…" />
               <Selector label="Ámbito" name="scope" defaultValue="local">
                 <option value="local">Solo {restaurante.name}</option>
                 {propietario && <option value="shared">Compartido con el grupo</option>}
               </Selector>
             </div>
+            <CasillasAlergenos className="mt-5" />
           </FormularioAccion>
         </Tarjeta>
       )}
@@ -66,7 +67,7 @@ export default async function Ingredientes({ params }: { params: Promise<{ rid: 
             return (
               <tr key={i.id} className="align-top">
                 <td className="px-5 py-4">
-                  <p className="font-medium">{i.name}</p>
+                  <Link href={`/panel/${rid}/ingredientes/${i.id}`} className="font-medium text-tinta hover:text-musgo hover:underline">{i.name}</Link>
                   <p className="text-[12px] text-niebla">
                     {i.category ?? "Sin categoría"}
                     {i.restaurant_id === null && " · compartido"}

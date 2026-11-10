@@ -6,7 +6,7 @@
 import { calculate, type CalculationInput, type CalculationResult, type ChannelInput, type DataQuality, type EnergySource, type IngredientRef, type QuantityUnit } from "@/lib/engine";
 
 export interface CatalogoPlano {
-  ingredientes: Record<string, IngredientRef & { archivado?: boolean }>;
+  ingredientes: Record<string, IngredientRef & { archivado?: boolean; allergens?: string[]; category?: string | null }>;
   equipos: Record<string, {
     name: string; source: EnergySource; nominalPowerW: string | null; powerQuality: DataQuality;
     dutyFactor: string; dutyFactorQuality: DataQuality; preheatMinutes: string;
@@ -15,7 +15,7 @@ export interface CatalogoPlano {
   perfiles: Record<string, { name: string; costPerHour: string }>;
   consumibles: Record<string, { name: string; amount: string; per: "portion" | "batch" | null }>;
   /** Elaboraciones: coste directo por unidad base de su versión activa */
-  subrecetas: Record<string, { name: string; baseUnit: "g" | "ml" | "unit"; costPerUnit: string | null; status: CalculationResult["status"] | "sin_version" }>;
+  subrecetas: Record<string, { name: string; baseUnit: "g" | "ml" | "unit"; costPerUnit: string | null; status: CalculationResult["status"] | "sin_version"; allergens?: string[] }>;
   overheads: { value: string; detalle: string } | null;
 }
 
@@ -113,4 +113,24 @@ export function calcularDesdeCatalogo(v: VersionEditable, cat: CatalogoPlano, ch
   }
   if (esPlato && overheads && cat.overheads) result.assumptions.push(`Gastos generales: ${cat.overheads.detalle}.`);
   return { input, result, unidad: esPlato ? "ración" : UNIDAD[v.yield_unit ?? "g"], avisos };
+}
+
+/** Los 14 alérgenos de declaración obligatoria (Reglamento UE 1169/2011). */
+export const ALERGENOS = [
+  "gluten", "crustáceos", "huevo", "pescado", "cacahuetes", "soja", "leche",
+  "frutos de cáscara", "apio", "mostaza", "sésamo", "sulfitos", "altramuces", "moluscos",
+] as const;
+
+/** Alérgenos de una receta: los de sus materias primas y elaboraciones + los añadidos a mano. */
+export function alergenosDe(v: Pick<VersionEditable, "ingredientes">, cat: CatalogoPlano, extra: string[] = []): string[] {
+  const set = new Set<string>(extra.map((a) => a.toLowerCase()));
+  for (const l of v.ingredientes) {
+    const lista = l.sub_recipe_id ? cat.subrecetas[l.sub_recipe_id]?.allergens : l.ingredient_id ? cat.ingredientes[l.ingredient_id]?.allergens : undefined;
+    for (const a of lista ?? []) set.add(a.toLowerCase());
+  }
+  return [...set].sort((a, b) => {
+    const ia = ALERGENOS.indexOf(a as (typeof ALERGENOS)[number]);
+    const ib = ALERGENOS.indexOf(b as (typeof ALERGENOS)[number]);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+  });
 }

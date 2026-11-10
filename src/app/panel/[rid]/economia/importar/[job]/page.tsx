@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FormularioAccion } from "@/components/formulario-accion";
 import { Mundo, mundoDeSlug } from "@/components/mundo";
-import { Insignia, Selector, Tabla, Tarjeta, euro } from "@/components/ui";
+import { Insignia, Selector, Tabla, Tarjeta, euro, SinPermiso } from "@/components/ui";
 import { getRestaurante } from "@/lib/contexto";
 import type { BloqueResumen } from "@/lib/importar/analitica";
 import { aplicarImportacion, deshacerImportacion } from "../../actions";
@@ -14,6 +14,7 @@ export default async function RevisarImportacion({ params }: { params: Promise<{
   const r = await getRestaurante(rid);
   if (!r) notFound();
   const { ctx, restaurante } = r;
+  if (!ctx.puedeVer(restaurante, "economia")) return <SinPermiso apartado="economía" />;
   const sb = ctx.supabase;
   const { data: j } = await sb.from("import_jobs").select("id, file_name, year, status, summary, mapping, rows_total, rows_error, created_at, applied_at").eq("id", job).maybeSingle();
   if (!j) notFound();

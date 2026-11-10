@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AccionRapida, FormularioAccion } from "@/components/formulario-accion";
-import { Campo, Insignia, Selector, Tabla, Tarjeta, euro, numero } from "@/components/ui";
+import { Campo, Insignia, Selector, Tabla, Tarjeta, euro, numero, SinPermiso } from "@/components/ui";
 import { getRestaurante } from "@/lib/contexto";
 import { cargarIngredientes } from "@/lib/datos";
 import { anadirLinea, borrarFactura, guardarCabecera, quitarLinea, reabrirFactura, registrarFactura, validarFactura } from "../actions";
@@ -16,6 +16,7 @@ export default async function FacturaDetalle({ params }: { params: Promise<{ rid
   const r = await getRestaurante(rid);
   if (!r) notFound();
   const { ctx, restaurante } = r;
+  if (!ctx.puedeVer(restaurante, "compras")) return <SinPermiso apartado="las compras" />;
   const sb = ctx.supabase;
   const { data: f } = await sb.from("purchase_invoices")
     .select("id, number, invoice_date, status, discount_total, shipping, tax_total, total, notes, version, supplier_id, posted_at, supplier:suppliers(name)")
@@ -29,7 +30,7 @@ export default async function FacturaDetalle({ params }: { params: Promise<{ rid
   ]);
   const ing = new Map(ings.map((i) => [i.id, i]));
   const editable = f.status === "draft" || f.status === "review";
-  const puede = ctx.puede(restaurante, "precios");
+  const puede = ctx.puede(restaurante, "compras");
   const e = ESTADO_FACTURA[f.status as keyof typeof ESTADO_FACTURA];
   const bruto = (lineas ?? []).reduce((a, l) => a + Number(l.packs) * Number(l.pack_price) * (1 - Number(l.discount_pct) / 100), 0);
   const neto = bruto - Number(f.discount_total) + Number(f.shipping);

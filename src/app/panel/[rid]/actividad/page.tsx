@@ -18,12 +18,15 @@ export default async function Actividad({
   const r = await getRestaurante(rid);
   if (!r) notFound();
   const { ctx, restaurante } = r;
+  if (!ctx.esPropietario(restaurante.organization_id)) {
+    return <Vacio titulo="Solo el propietario" texto="El registro de actividad solo lo puede ver el propietario del grupo." />;
+  }
   const grupo = sp.ver === "grupo";
   const quien = sp.quien && /^[0-9a-f-]{36}$/.test(sp.quien) ? sp.quien : undefined;
   const antes = sp.antes && !Number.isNaN(Date.parse(sp.antes)) ? sp.antes : undefined;
 
   const [{ items, siguiente }, { data: equipo }] = await Promise.all([
-    cargarActividad(ctx.supabase, { restaurantes: ctx.restaurants, restauranteId: grupo ? undefined : rid, quien, antes }),
+    cargarActividad(ctx.supabase, { restaurantes: ctx.restaurants, restauranteId: grupo ? undefined : rid, quien, antes, limite: 80, todo: true }),
     ctx.supabase.from("profiles").select("user_id, display_name").order("display_name"),
   ]);
 
@@ -39,7 +42,7 @@ export default async function Actividad({
 
   return (
     <>
-      <Cabecera titulo="Actividad" subtitulo="Lo que hace cada persona del equipo, en orden. Todo cambio queda registrado con quién y cuándo." />
+      <Cabecera titulo="Registro de actividad" subtitulo="Cada movimiento que hace cualquier persona del equipo, con quién, qué y cuándo. Solo lo ves tú." />
 
       <div className="mb-8 flex flex-col gap-3">
         <div className="flex flex-wrap gap-2" role="group" aria-label="Ámbito">

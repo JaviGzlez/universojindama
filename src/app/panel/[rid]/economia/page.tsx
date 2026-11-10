@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { AccionRapida } from "@/components/formulario-accion";
 import { COLOR_SERIE } from "@/components/graficos";
 import { mundoDeSlug } from "@/components/mundo";
-import { Cabecera, Insignia, euro } from "@/components/ui";
+import { Cabecera, Insignia, euro, SinPermiso } from "@/components/ui";
 import { getRestaurante } from "@/lib/contexto";
 import { resumenPorRestaurante } from "@/lib/economia";
 import { ResumenRestaurante } from "../resumen";
@@ -17,6 +17,7 @@ export default async function Resultados({ params, searchParams }: { params: Pro
   const r = await getRestaurante(rid);
   if (!r) notFound();
   const { ctx, restaurante } = r;
+  if (!ctx.puedeVer(restaurante, "economia")) return <SinPermiso apartado="economía" />;
   const sb = ctx.supabase;
   const anio = Number(sp.anio) >= 2000 ? Number(sp.anio) : new Date().getUTCFullYear();
   const grupo = sp.ver === "grupo";
@@ -36,7 +37,7 @@ export default async function Resultados({ params, searchParams }: { params: Pro
   const total = (k: keyof (typeof meses)[number]) => meses.reduce((a, m) => a + (m[k] as number), 0);
   const ingresos = total("ingresos");
   const pct = (v: number) => (ingresos ? `${((v / ingresos) * 100).toFixed(1).replace(".", ",")} %` : "");
-  const puede = ctx.puede(restaurante, "ajustes");
+  const puede = ctx.puede(restaurante, "economia");
   const mesNombre = (iso: string) => new Date(iso).toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" });
   const cats = ((categorias ?? []) as { kind: string; nature: string; category: string; total: string }[]);
   const gastoCats = cats.filter((c) => c.kind === "expense").sort((a, b) => Number(b.total) - Number(a.total));
