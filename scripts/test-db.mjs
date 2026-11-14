@@ -232,11 +232,11 @@ await db.exec(`insert into auth.users (id, email) values ('${D}','d@fuera.com')`
 await db.exec(`select set_config('request.jwt.claim.sub', '${A}', false)`);
 const T1 = (await db.query(`insert into tasks (organization_id, title) values ('${org}','Revisar alérgenos de la carta') returning id`)).rows[0].id;
 const T2 = (await db.query(`insert into tasks (organization_id, title, restaurant_ids) values ('${org}','Pedir aceite','{${jindama.id}}') returning id`)).rows[0].id;
-const T3 = (await db.query(`insert into tasks (organization_id, title, restaurant_ids, assignee_id) values ('${org}','Inventario de cámara','{${jaleo.id}}','${B}') returning id, created_by`)).rows[0];
+const T3 = (await db.query(`insert into tasks (organization_id, title, restaurant_ids, assignee_ids) values ('${org}','Inventario de cámara','{${jaleo.id}}','{${B},${C}}') returning id, created_by`)).rows[0];
 await db.exec(`select set_config('request.jwt.claim.sub', '', false)`);
 check('creador rellenado', T3.created_by === A);
 await as(A, async () => {
-  check('rechaza responsable de fuera del grupo', !(await tryQ(`insert into tasks (organization_id, title, assignee_id) values ('${org}','X','${D}')`)).ok);
+  check('rechaza responsable de fuera del grupo', !(await tryQ(`insert into tasks (organization_id, title, assignee_ids) values ('${org}','X','{${B},${D}}')`)).ok);
   check('rechaza restaurante inexistente', !(await tryQ(`insert into tasks (organization_id, title, restaurant_ids) values ('${org}','X','{00000000-0000-0000-0000-000000000999}')`)).ok);
 });
 await as(B, async () => {
@@ -246,26 +246,32 @@ await as(B, async () => {
   check('B mueve su tarea a revisión', (await tryQ(`update tasks set status='review' where id='${T3.id}'`)).ok);
   const done = await db.query(`update tasks set status='done' where id='${T3.id}' returning completed_at, completed_by`);
   check('al completar guarda quién y cuándo', done.rows[0].completed_at !== null && done.rows[0].completed_by === B);
-  check('B no puede asignar a otro una tarea libre', !(await tryQ(`update tasks set assignee_id='${C}' where id='${T1}'`)).ok);
+  check('B no puede asignar a otro una tarea libre', !(await tryQ(`update tasks set assignee_ids='{${C}}' where id='${T1}'`)).ok);
   check('B no puede cambiar el título de una tarea ajena', !(await tryQ(`update tasks set title='Otro' where id='${T1}'`)).ok);
   check('B no borra una tarea ajena', (await db.query(`delete from tasks where id='${T1}' returning id`)).rows.length === 0);
 });
 await as(C, async () => {
-  const cl = await tryQ(`update tasks set assignee_id='${C}', status='in_progress' where id='${T1}' returning version`);
+  const cl = await tryQ(`update tasks set assignee_ids='{${C}}', status='in_progress' where id='${T1}' returning version`);
+  check('C, corresponsable, mueve la tarea compartida', (await tryQ(`update tasks set status='review' where id='${T3.id}'`)).ok);
+  check('C ve la tarea compartida', (await db.query(`select id from tasks where id='${T3.id}'`)).rows.length === 1);
   check('C se queda una tarea libre y la empieza', cl.ok && cl.r.rows.length === 1);
   check('C comenta', (await tryQ(`insert into task_comments (task_id, body) values ('${T1}','Empiezo mañana')`)).ok);
   check('comentario con autor y grupo', (await db.query(`select author_id, organization_id from task_comments`)).rows.every((r) => r.author_id === C && r.organization_id === org));
 });
-await db.exec(`select set_config('request.jwt.claim.sub', '${A}', false); update tasks set assignee_id='${C}' where id='${T1}'`);
+await db.exec(`select set_config('request.jwt.claim.sub', '${A}', false); update tasks set assignee_ids='{${C}}' where id='${T1}'`);
 await as(B, async () => {
-  check('B no puede quitársela a quien la cogió', !(await tryQ(`update tasks set assignee_id='${B}' where id='${T1}'`)).ok);
+  check('B no puede quitársela a quien la cogió', !(await tryQ(`update tasks set assignee_ids='{${B}}' where id='${T1}'`)).ok);
+  check('B no puede apuntar a otra persona', !(await tryQ(`update tasks set assignee_ids='{${C},${A}}' where id='${T1}'`)).ok);
+  check('B se apunta a la tarea de C', (await tryQ(`update tasks set assignee_ids='{${C},${B}}' where id='${T1}'`)).ok);
+  check('apuntado, B ya puede moverla', (await tryQ(`update tasks set status='review' where id='${T1}'`)).ok);
 });
 await as(C, async () => {
-  check('C la suelta y vuelve a quedar libre', (await tryQ(`update tasks set assignee_id=null, status='pending' where id='${T1}'`)).ok);
+  check('C la suelta y vuelve a quedar libre', (await tryQ(`update tasks set assignee_ids='{}', status='pending' where id='${T1}'`)).ok);
 });
 await as(A, async () => {
   check('el propietario ve todas', (await db.query('select * from tasks')).rows.length === 3);
-  check('el propietario reasigna', (await tryQ(`update tasks set assignee_id='${B}' where id='${T2}'`)).ok);
+  check('el propietario reasigna', (await tryQ(`update tasks set assignee_ids='{${B},${C}}' where id='${T2}'`)).ok);
+  check('responsables sin duplicados', (await db.query(`update tasks set assignee_ids='{${B},${B},${C}}' where id='${T2}' returning assignee_ids`)).rows[0].assignee_ids.length === 2);
   check('el propietario borra', (await db.query(`delete from tasks where id='${T2}' returning id`)).rows.length === 1);
   check('tareas en el registro de actividad', (await db.query(`select * from audit_events where table_name='tasks'`)).rows.length >= 3);
 });

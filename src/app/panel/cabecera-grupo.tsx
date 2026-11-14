@@ -8,7 +8,7 @@ export async function CabeceraGrupo({ ctx, activo }: { ctx: Contexto; activo: "u
   const org = ctx.restaurants[0]?.organization_id;
   const propietario = org ? ctx.esPropietario(org) : false;
   const { count } = await ctx.supabase.from("tasks").select("id", { count: "exact", head: true })
-    .eq("assignee_id", ctx.user.id).neq("status", "done");
+    .contains("assignee_ids", [ctx.user.id]).neq("status", "done");
   const enlace = (id: typeof activo) =>
     `rounded-full px-3 py-1.5 font-medium transition ${activo === id ? "bg-tinta text-crema" : "text-tinta hover:bg-tinta/5"}`;
 

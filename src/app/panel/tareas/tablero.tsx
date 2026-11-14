@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
-import { ESTADOS, NOMBRE_ESTADO, NOMBRE_PRIORIDAD, diasHasta, iniciales, textoPlazo, type Estado, type Tarea } from "@/lib/tareas";
+import { ESTADOS, NOMBRE_ESTADO, NOMBRE_PRIORIDAD, diasHasta, iniciales, textoPlazo, textoResponsables, colorAvatar, type Estado, type Tarea } from "@/lib/tareas";
 import { cambiarTarea } from "./actions";
 
 interface Props {
@@ -41,14 +41,14 @@ export function Tablero({ tareas, nombres, restaurantes, yo, esAdmin }: Props) {
     return () => clearTimeout(h);
   }, [aviso]);
 
-  const gestiona = (t: Tarea) => esAdmin || t.created_by === yo || t.assignee_id === yo;
+  const gestiona = (t: Tarea) => esAdmin || t.created_by === yo || t.assignee_ids.includes(yo);
 
   function aplicar(t: Tarea, cambio: { status?: Estado; asignarme?: boolean; soltar?: boolean }) {
     const antes = lista;
     setLista((l) => l.map((x) => x.id !== t.id ? x : {
       ...x,
       status: cambio.status ?? x.status,
-      assignee_id: cambio.asignarme ? yo : cambio.soltar ? null : x.assignee_id,
+      assignee_ids: cambio.asignarme ? [...new Set([...x.assignee_ids, yo])] : cambio.soltar ? x.assignee_ids.filter((u) => u !== yo) : x.assignee_ids,
       completed_at: (cambio.status ?? x.status) === "done" ? x.completed_at ?? new Date().toISOString() : null,
     }));
     start(async () => {
@@ -62,8 +62,8 @@ export function Tablero({ tareas, nombres, restaurantes, yo, esAdmin }: Props) {
     setArrastrando(null); setSobre(null);
     if (!t || t.status === estado) return;
     if (gestiona(t)) aplicar(t, { status: estado });
-    else if (!t.assignee_id && estado === "in_progress") aplicar(t, { status: estado, asignarme: true });
-    else setAviso("Solo puedes moverla si es tuya o la has creado. Si está libre, arrástrala a «En curso» para quedártela.");
+    else if (t.assignee_ids.length === 0 && estado === "in_progress") aplicar(t, { status: estado, asignarme: true });
+    else setAviso("Solo puedes moverla si es tuya o la has creado. Si está libre, arrástrala a «En curso» para quedártela, o pulsa «Me apunto».");
   }
 
   return (
@@ -120,7 +120,8 @@ function TarjetaTarea({
   const i = ESTADOS.indexOf(t.status);
   const dias = t.status === "done" ? null : diasHasta(t.due_date);
   const plazo = textoPlazo(dias);
-  const libre = !t.assignee_id;
+  const libre = t.assignee_ids.length === 0;
+  const mia = t.assignee_ids.includes(yo);
   const arrastrable = gestiona || libre;
   return (
     <li
@@ -165,11 +166,21 @@ function TarjetaTarea({
             </button>
           )
         ) : (
-          <span className="flex min-w-0 items-center gap-2 text-[12px] text-grafito">
-            <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${t.assignee_id === yo ? "bg-tinta text-crema" : "bg-crema-2 text-grafito"}`} aria-hidden="true">
-              {iniciales(nombres[t.assignee_id!] ?? "?")}
+          <span className="flex min-w-0 flex-1 items-center gap-2 text-[12px] text-grafito">
+            <span className="flex shrink-0 -space-x-2" aria-hidden="true">
+              {[...t.assignee_ids].sort((a, b) => (a === yo ? -1 : b === yo ? 1 : 0)).slice(0, 4).map((u) => (
+                <span key={u} title={nombres[u]} style={u === yo ? undefined : colorAvatar(u)} className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold ring-2 ring-white ${u === yo ? "bg-tinta text-crema" : ""}`}>
+                  {iniciales(nombres[u] ?? "?")}
+                </span>
+              ))}
             </span>
-            <span className="truncate">{t.assignee_id === yo ? "Tú" : nombres[t.assignee_id!] ?? "Usuario"}</span>
+            <span className="line-clamp-2 leading-tight">{textoResponsables(t.assignee_ids, nombres, yo)}</span>
+            {!mia && t.status !== "done" && (
+              <button type="button" onClick={() => onCambio({ asignarme: true })}
+                className="ml-auto shrink-0 rounded-full px-2 py-1 text-[12px] font-semibold text-tinta underline-offset-2 hover:bg-crema-2 hover:underline">
+                Me apunto
+              </button>
+            )}
           </span>
         )}
         {gestiona && (

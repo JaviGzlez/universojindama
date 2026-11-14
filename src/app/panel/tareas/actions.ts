@@ -29,7 +29,6 @@ const Datos = z.object({
   description: z.string().trim().max(4000, "Máximo 4000 caracteres.").optional(),
   priority: z.enum(PRIORIDADES).default("normal"),
   due_date: fecha,
-  assignee_id: z.string().uuid().optional().or(z.literal("").transform(() => undefined)),
   status: z.enum(ESTADOS).default("pending"),
 });
 
@@ -39,18 +38,18 @@ function leer(form: FormData) {
     description: form.get("description") ?? undefined,
     priority: form.get("priority") || undefined,
     due_date: form.get("due_date") ?? undefined,
-    assignee_id: form.get("assignee_id") ?? undefined,
     status: form.get("status") || undefined,
   });
   const restaurantes = form.getAll("restaurant_ids").map(String).filter(Boolean);
-  return { r, restaurantes };
+  const responsables = [...new Set(form.getAll("assignee_ids").map(String).filter((x) => /^[0-9a-f-]{36}$/i.test(x)))];
+  return { r, restaurantes, responsables };
 }
 
 export async function crearTarea(_: ResultadoAccion, form: FormData): Promise<ResultadoAccion> {
   const ctx = await getContexto();
   const org = ctx?.restaurants[0]?.organization_id;
   if (!ctx || !org) return fallo("Sesión caducada.");
-  const { r, restaurantes } = leer(form);
+  const { r, restaurantes, responsables } = leer(form);
   if (!r.success) return fallo("Revisa los campos.", Object.fromEntries(r.error.issues.map((i) => [String(i.path[0]), i.message])));
   const d = r.data;
   const { error } = await ctx.supabase.from("tasks").insert({
@@ -59,13 +58,17 @@ export async function crearTarea(_: ResultadoAccion, form: FormData): Promise<Re
     description: d.description || null,
     priority: d.priority,
     due_date: d.due_date ?? null,
-    assignee_id: d.assignee_id ?? null,
+    assignee_ids: responsables,
     status: d.status,
     restaurant_ids: restaurantes,
   });
   if (error) return fallo(traducir(error.message));
   refrescar();
-  return { ok: true, mensaje: d.assignee_id ? "Tarea creada y asignada" : "Tarea creada (sin asignar)", t: t() };
+  return {
+    ok: true,
+    mensaje: responsables.length > 1 ? `Tarea creada para ${responsables.length} personas` : responsables.length ? "Tarea creada y asignada" : "Tarea creada (sin asignar)",
+    t: t(),
+  };
 }
 
 export async function editarTarea(_: ResultadoAccion, form: FormData): Promise<ResultadoAccion> {
@@ -73,7 +76,7 @@ export async function editarTarea(_: ResultadoAccion, form: FormData): Promise<R
   if (!ctx) return fallo("Sesión caducada.");
   const id = String(form.get("id") ?? "");
   const version = Number(form.get("version"));
-  const { r, restaurantes } = leer(form);
+  const { r, restaurantes, responsables } = leer(form);
   if (!r.success) return fallo("Revisa los campos.", Object.fromEntries(r.error.issues.map((i) => [String(i.path[0]), i.message])));
   const d = r.data;
   const { data, error } = await ctx.supabase.from("tasks").update({
@@ -81,7 +84,7 @@ export async function editarTarea(_: ResultadoAccion, form: FormData): Promise<R
     description: d.description || null,
     priority: d.priority,
     due_date: d.due_date ?? null,
-    assignee_id: d.assignee_id ?? null,
+    assignee_ids: responsables,
     status: d.status,
     restaurant_ids: restaurantes,
   }).eq("id", id).eq("version", version).select("id");
@@ -91,25 +94,38 @@ export async function editarTarea(_: ResultadoAccion, form: FormData): Promise<R
   return { ok: true, mensaje: "Cambios guardados", t: t() };
 }
 
-/** Cambio rápido desde el tablero: estado, «me la quedo» o soltarla. Devuelve error legible. */
-export async function cambiarTarea(id: string, cambio: { status?: Estado; asignarme?: boolean; soltar?: boolean; position?: number }) {
+/**
+ * Cambio rápido desde el tablero: estado, «me la quedo» (si está libre), «me apunto» (unirse
+ * a una tarea de la que ya es responsable otra persona) o soltarla. Devuelve error legible.
+ */
+export async function cambiarTarea(id: string, cambio: { status?: Estado; asignarme?: boolean; soltar?: boolean }) {
   const ctx = await getContexto();
   if (!ctx) return { ok: false, mensaje: "Sesión caducada." };
+  const yo = ctx.user.id;
   const upd: Record<string, unknown> = {};
   if (cambio.status) {
     if (!ESTADOS.includes(cambio.status)) return { ok: false, mensaje: "Estado no válido." };
     upd.status = cambio.status;
   }
-  if (cambio.asignarme) upd.assignee_id = ctx.user.id;
-  if (cambio.soltar) upd.assignee_id = null;
-  if (typeof cambio.position === "number" && Number.isFinite(cambio.position)) upd.position = cambio.position;
+  let version: number | null = null;
+  let libre = false;
+  if (cambio.asignarme || cambio.soltar) {
+    const { data: actual } = await ctx.supabase.from("tasks").select("assignee_ids, version").eq("id", id).maybeSingle();
+    if (!actual) return { ok: false, mensaje: "No se ha encontrado la tarea." };
+    const lista = (actual.assignee_ids ?? []) as string[];
+    libre = lista.length === 0;
+    version = actual.version;
+    upd.assignee_ids = cambio.asignarme ? [...new Set([...lista, yo])] : lista.filter((x) => x !== yo);
+  }
   if (Object.keys(upd).length === 0) return { ok: true, mensaje: "" };
   let q = ctx.supabase.from("tasks").update(upd).eq("id", id);
-  // «Me la quedo» solo si sigue libre: si otro se adelantó, no se pisa
-  if (cambio.asignarme) q = q.is("assignee_id", null);
+  // Si otra persona ha cambiado los responsables entre medias, no se pisa
+  if (version !== null) q = q.eq("version", version);
   const { data, error } = await q.select("id");
   if (error) return { ok: false, mensaje: traducir(error.message) };
-  if (!data?.length) return { ok: false, mensaje: cambio.asignarme ? "Otra persona se la ha quedado antes." : "No se ha encontrado la tarea." };
+  if (!data?.length) {
+    return { ok: false, mensaje: cambio.asignarme && libre ? "Otra persona se la ha quedado antes. Recarga para verla." : "La tarea ha cambiado mientras tanto. Recarga la página." };
+  }
   refrescar(id);
   return { ok: true, mensaje: "" };
 }

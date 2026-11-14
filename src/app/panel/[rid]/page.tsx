@@ -30,11 +30,11 @@ export default async function Inicio({ params }: { params: Promise<{ rid: string
     sb.from("recipes").select("id", { count: "exact", head: true }).eq("restaurant_id", rid).eq("status", "active"),
     sb.from("menu_items").select("id", { count: "exact", head: true }).eq("restaurant_id", rid).eq("status", "active"),
   ]);
-  const { data: tareasAbiertas } = await sb.from("tasks").select("id, title, assignee_id, due_date, priority, restaurant_ids")
+  const { data: tareasAbiertas } = await sb.from("tasks").select("id, title, assignee_ids, due_date, priority, restaurant_ids")
     .eq("organization_id", restaurante.organization_id).neq("status", "done")
     .or(`restaurant_ids.cs.{${rid}},restaurant_ids.eq.{}`).limit(200);
-  const mias = (tareasAbiertas ?? []).filter((t) => t.assignee_id === ctx.user.id);
-  const libres = (tareasAbiertas ?? []).filter((t) => !t.assignee_id);
+  const mias = (tareasAbiertas ?? []).filter((t) => (t.assignee_ids as string[]).includes(ctx.user.id));
+  const libres = (tareasAbiertas ?? []).filter((t) => (t.assignee_ids as string[]).length === 0);
   const conPrecio = ings.filter((i) => i.precio).length;
   const base = `/panel/${rid}`;
   const mundo = mundoDeSlug(restaurante.slug);

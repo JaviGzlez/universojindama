@@ -4,7 +4,7 @@ import { FormularioAccion } from "@/components/formulario-accion";
 import { COLOR_MUNDO, mundoDeSlug } from "@/components/mundo";
 import { Tarjeta, claseInput } from "@/components/ui";
 import { getContexto } from "@/lib/contexto";
-import { COLS_TAREA, NOMBRE_ESTADO, NOMBRE_PRIORIDAD, cargarPersonas, diasHasta, iniciales, textoPlazo, type Tarea } from "@/lib/tareas";
+import { COLS_TAREA, NOMBRE_ESTADO, NOMBRE_PRIORIDAD, cargarPersonas, diasHasta, iniciales, textoPlazo, textoResponsables, type Tarea } from "@/lib/tareas";
 import { CabeceraGrupo } from "../../cabecera-grupo";
 import { borrarTarea, comentarTarea, editarTarea } from "../actions";
 import { CamposTarea } from "../campos";
@@ -28,7 +28,7 @@ export default async function DetalleTarea({ params }: { params: Promise<{ id: s
   const nombre = (u: string | null) => (u ? personas.find((p) => p.user_id === u)?.display_name ?? "Usuario" : "—");
   const yo = ctx.user.id;
   const esAdmin = ctx.esAdminGrupo(t.organization_id);
-  const gestiona = esAdmin || t.created_by === yo || t.assignee_id === yo;
+  const gestiona = esAdmin || t.created_by === yo || t.assignee_ids.includes(yo);
   const etiquetas = ctx.restaurants.map((r) => ({ id: r.id, name: r.name, color: COLOR_MUNDO[mundoDeSlug(r.slug)] }));
   const dias = t.status === "done" ? null : diasHasta(t.due_date);
 
@@ -53,7 +53,7 @@ export default async function DetalleTarea({ params }: { params: Promise<{ id: s
 
         <dl className="mt-6 grid grid-cols-2 gap-3 text-[14px] md:grid-cols-4">
           {[
-            ["Responsable", t.assignee_id ? (t.assignee_id === yo ? "Tú" : nombre(t.assignee_id)) : "Sin asignar"],
+            [t.assignee_ids.length > 1 ? "Responsables" : "Responsable", textoResponsables(t.assignee_ids, Object.fromEntries(personas.map((p) => [p.user_id, p.display_name])), yo)],
             ["Fecha límite", t.due_date ? new Date(t.due_date + "T12:00:00").toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "long" }) : "—"],
             ["Creada por", `${nombre(t.created_by)} · ${fechaHora(t.created_at)}`],
             [t.status === "done" ? "Completada por" : "Última actualización", t.status === "done" && t.completed_at ? `${nombre(t.completed_by)} · ${fechaHora(t.completed_at)}` : fechaHora(t.updated_at)],
@@ -62,7 +62,7 @@ export default async function DetalleTarea({ params }: { params: Promise<{ id: s
           ))}
         </dl>
 
-        <BotonesEstado id={t.id} estado={t.status} libre={!t.assignee_id} mia={t.assignee_id === yo} gestiona={gestiona} />
+        <BotonesEstado id={t.id} estado={t.status} libre={t.assignee_ids.length === 0} mia={t.assignee_ids.includes(yo)} gestiona={gestiona} />
 
         <section className="mt-10">
           <h2 className="mb-3 text-[22px] font-semibold tracking-[-0.02em]">Comentarios</h2>

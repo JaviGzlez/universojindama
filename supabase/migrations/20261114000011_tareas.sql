@@ -1,6 +1,7 @@
 -- Universo Jindama · Tareas del equipo
 -- Tareas del grupo con estado (pendiente, en curso, en revisión, completada), prioridad, fecha límite,
--- responsable opcional y restaurantes opcionales. Las tareas sin responsable las puede coger cualquiera.
+-- uno o varios responsables (opcional) y restaurantes opcionales. Las tareas sin responsable las puede coger
+-- cualquiera, y cualquiera puede apuntarse a una tarea que ya tiene responsables.
 -- Ejecutar después de la migración 10. Se puede repetir sin peligro.
 
 create table if not exists public.tasks (
@@ -11,7 +12,7 @@ create table if not exists public.tasks (
   status           text not null default 'pending' check (status in ('pending', 'in_progress', 'review', 'done')),
   priority         text not null default 'normal' check (priority in ('low', 'normal', 'high', 'urgent')),
   due_date         date,
-  assignee_id      uuid references auth.users(id) on delete set null,
+  assignee_ids     uuid[] not null default '{}',
   restaurant_ids   uuid[] not null default '{}',
   created_by       uuid default auth.uid() references auth.users(id) on delete set null,
   completed_at     timestamptz,
@@ -22,7 +23,21 @@ create table if not exists public.tasks (
   version          integer not null default 1
 );
 create index if not exists tasks_org_status on public.tasks (organization_id, status, position);
-create index if not exists tasks_assignee on public.tasks (assignee_id) where status <> 'done';
+
+-- Actualización desde la primera versión (un solo responsable): se pasa a lista y se conserva el dato
+do $$
+begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'tasks' and column_name = 'assignee_id') then
+    drop policy if exists tasks_select on public.tasks;
+    drop policy if exists tasks_update on public.tasks;
+    alter table public.tasks add column if not exists assignee_ids uuid[] not null default '{}';
+    update public.tasks set assignee_ids = array[assignee_id] where assignee_id is not null and assignee_ids = '{}';
+    alter table public.tasks drop column assignee_id;
+  end if;
+end $$;
+drop function if exists public.can_see_task(uuid, uuid[], uuid, uuid);
+drop function if exists public.can_manage_task(uuid, uuid, uuid);
+create index if not exists tasks_assignees on public.tasks using gin (assignee_ids);
 
 create table if not exists public.task_comments (
   id               uuid primary key default gen_random_uuid(),
@@ -39,26 +54,26 @@ create index if not exists task_comments_task on public.task_comments (task_id, 
 -- El resto: las de todo el grupo (sin restaurantes), las de sus restaurantes,
 -- las que ha creado y las que tiene asignadas.
 -- ---------------------------------------------------------------------------
-create or replace function public.can_see_task(p_org uuid, p_restaurants uuid[], p_assignee uuid, p_creator uuid)
+create or replace function public.can_see_task(p_org uuid, p_restaurants uuid[], p_assignees uuid[], p_creator uuid)
 returns boolean
 language sql stable security definer set search_path = public
 as $$
   select public.is_org_member(p_org) and (
     public.has_org_role(p_org, array['admin']::public.app_role[])
-    or coalesce(p_assignee = auth.uid(), false) or coalesce(p_creator = auth.uid(), false)
+    or auth.uid() = any (coalesce(p_assignees, '{}')) or coalesce(p_creator = auth.uid(), false)
     or coalesce(array_length(p_restaurants, 1), 0) = 0
     or exists (select 1 from unnest(p_restaurants) r where public.has_restaurant_access(r))
   );
 $$;
 
--- ¿Puede editarla del todo? Propietario/administrador de grupo, quien la creó o quien la tiene asignada.
-create or replace function public.can_manage_task(p_org uuid, p_assignee uuid, p_creator uuid)
+-- ¿Puede editarla del todo? Propietario/administrador de grupo, quien la creó o cualquiera de sus responsables.
+create or replace function public.can_manage_task(p_org uuid, p_assignees uuid[], p_creator uuid)
 returns boolean
 language sql stable security definer set search_path = public
 as $$
   select public.is_org_member(p_org) and (
     public.has_org_role(p_org, array['admin']::public.app_role[])
-    or coalesce(p_assignee = auth.uid(), false) or coalesce(p_creator = auth.uid(), false)
+    or auth.uid() = any (coalesce(p_assignees, '{}')) or coalesce(p_creator = auth.uid(), false)
   );
 $$;
 
@@ -91,15 +106,16 @@ begin
   if new.title is not null then new.title := trim(new.title); end if;
   new.description := nullif(trim(coalesce(new.description, '')), '');
   new.restaurant_ids := coalesce((select array_agg(distinct x) from unnest(new.restaurant_ids) x where x is not null), '{}');
+  new.assignee_ids := coalesce((select array_agg(distinct x) from unnest(new.assignee_ids) x where x is not null), '{}');
 
   -- Restaurantes: del mismo grupo
   if exists (select 1 from unnest(new.restaurant_ids) x
              where not exists (select 1 from public.restaurants r where r.id = x and r.organization_id = new.organization_id)) then
     raise exception 'Algún restaurante no pertenece al grupo' using errcode = '22023';
   end if;
-  -- Responsable: miembro del grupo
-  if new.assignee_id is not null and not exists (
-    select 1 from public.memberships m where m.organization_id = new.organization_id and m.user_id = new.assignee_id) then
+  -- Responsables: miembros del grupo
+  if exists (select 1 from unnest(new.assignee_ids) x
+             where not exists (select 1 from public.memberships m where m.organization_id = new.organization_id and m.user_id = x)) then
     raise exception 'Esa persona no pertenece al grupo' using errcode = '22023';
   end if;
 
@@ -109,14 +125,16 @@ begin
     new.organization_id := old.organization_id;
     new.created_by := old.created_by;
     new.created_at := old.created_at;
-    v_full := auth.uid() is null or coalesce(public.can_manage_task(old.organization_id, old.assignee_id, old.created_by), false);
+    v_full := auth.uid() is null or coalesce(public.can_manage_task(old.organization_id, old.assignee_ids, old.created_by), false);
     if not v_full then
-      -- Cualquiera que la vea puede quedársela si está libre (y empezarla), nada más
-      if old.assignee_id is not null or new.assignee_id is distinct from auth.uid()
+      -- Quien la ve puede apuntarse (solo añadirse a sí mismo, sin quitar a nadie) y,
+      -- si estaba libre, empezarla. Nada más.
+      if not (new.assignee_ids @> old.assignee_ids and new.assignee_ids <@ (old.assignee_ids || auth.uid())
+              and auth.uid() = any (new.assignee_ids))
+         or new.status not in (old.status, case when old.assignee_ids = '{}' then 'in_progress' end)
          or new.title is distinct from old.title or new.description is distinct from old.description
          or new.priority is distinct from old.priority or new.due_date is distinct from old.due_date
-         or new.restaurant_ids is distinct from old.restaurant_ids
-         or new.status not in (old.status, 'in_progress') then
+         or new.restaurant_ids is distinct from old.restaurant_ids then
         raise exception 'Solo quien la creó, quien la tiene asignada o un administrador puede cambiar esta tarea' using errcode = '42501';
       end if;
     end if;
@@ -168,7 +186,7 @@ alter table public.task_comments enable row level security;
 
 drop policy if exists tasks_select on public.tasks;
 create policy tasks_select on public.tasks for select to authenticated
-  using (public.can_see_task(organization_id, restaurant_ids, assignee_id, created_by));
+  using (public.can_see_task(organization_id, restaurant_ids, assignee_ids, created_by));
 
 drop policy if exists tasks_insert on public.tasks;
 create policy tasks_insert on public.tasks for insert to authenticated
@@ -177,7 +195,7 @@ create policy tasks_insert on public.tasks for insert to authenticated
 -- La regla fina (quién cambia qué) está en tasks_guard
 drop policy if exists tasks_update on public.tasks;
 create policy tasks_update on public.tasks for update to authenticated
-  using (public.can_see_task(organization_id, restaurant_ids, assignee_id, created_by))
+  using (public.can_see_task(organization_id, restaurant_ids, assignee_ids, created_by))
   with check (public.is_org_member(organization_id));
 
 drop policy if exists tasks_delete on public.tasks;

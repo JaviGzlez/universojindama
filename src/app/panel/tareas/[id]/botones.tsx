@@ -22,6 +22,10 @@ export function BotonesEstado({ id, estado, libre, mia, gestiona }: { id: string
           <button type="button" disabled={pendiente} onClick={() => run({ asignarme: true, status: estado === "pending" ? "in_progress" : undefined })}
             className={`${boton} bg-tinta text-crema hover:bg-grafito`}>Me la quedo</button>
         )}
+        {!libre && !mia && estado !== "done" && (
+          <button type="button" disabled={pendiente} onClick={() => run({ asignarme: true })}
+            className={`${boton} bg-tinta text-crema hover:bg-grafito`}>Me apunto</button>
+        )}
         {gestiona && ESTADOS.filter((e) => e !== estado).map((e) => (
           <button key={e} type="button" disabled={pendiente} onClick={() => run({ status: e })}
             className={`${boton} ${e === "done" ? "bg-musgo text-white hover:opacity-90" : "bg-white text-tinta ring-1 ring-linea hover:bg-crema-2"}`}>
@@ -30,7 +34,7 @@ export function BotonesEstado({ id, estado, libre, mia, gestiona }: { id: string
         ))}
         {mia && estado !== "done" && (
           <button type="button" disabled={pendiente} onClick={() => run({ soltar: true })}
-            className={`${boton} text-grafito hover:bg-crema-2`}>Soltarla (que la coja otro)</button>
+            className={`${boton} text-grafito hover:bg-crema-2`}>Dejar de ser responsable</button>
         )}
       </div>
       <p aria-live="polite" className="mt-2 text-[13px] text-error">{error}</p>

@@ -30,14 +30,14 @@ export default async function Tareas({ searchParams }: { searchParams: Promise<{
   const [todas, personas] = await Promise.all([cargarTareas(ctx.supabase, org), cargarPersonas(ctx.supabase, org)]);
   const yo = ctx.user.id;
   const tareas = todas.filter((t) =>
-    (vista === "todas" || (vista === "mias" && t.assignee_id === yo) || (vista === "libres" && !t.assignee_id) || (vista === "creadas" && t.created_by === yo))
+    (vista === "todas" || (vista === "mias" && t.assignee_ids.includes(yo)) || (vista === "libres" && t.assignee_ids.length === 0) || (vista === "creadas" && t.created_by === yo))
     && (!filtroR || t.restaurant_ids.length === 0 || t.restaurant_ids.includes(filtroR)));
 
   const etiquetas = ctx.restaurants.map((r) => ({ id: r.id, name: r.name, color: COLOR_MUNDO[mundoDeSlug(r.slug)] }));
   const abiertas = todas.filter((t) => t.status !== "done");
   const resumen = [
-    { k: "Asignadas a ti", v: abiertas.filter((t) => t.assignee_id === yo).length, href: "?ver=mias" },
-    { k: "Sin asignar", v: abiertas.filter((t) => !t.assignee_id).length, href: "?ver=libres" },
+    { k: "Asignadas a ti", v: abiertas.filter((t) => t.assignee_ids.includes(yo)).length, href: "?ver=mias" },
+    { k: "Sin asignar", v: abiertas.filter((t) => t.assignee_ids.length === 0).length, href: "?ver=libres" },
     { k: "Vencidas", v: abiertas.filter((t) => (diasHasta(t.due_date) ?? 0) < 0).length, href: "?ver=todas" },
     { k: "En revisión", v: abiertas.filter((t) => t.status === "review").length, href: "?ver=todas" },
   ];
@@ -62,7 +62,7 @@ export default async function Tareas({ searchParams }: { searchParams: Promise<{
             <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-niebla">Equipo</p>
             <h1 className="mt-1 text-[36px] font-semibold leading-tight tracking-[-0.03em] md:text-[48px]">Tareas</h1>
             <p className="mt-2 max-w-xl text-[15px] leading-relaxed text-niebla">
-              Crea una tarea para alguien, para un restaurante o para todo el grupo. Si la dejas sin asignar, quien la vea puede pulsar <strong className="font-medium text-grafito">Me la quedo</strong>. Arrastra las tarjetas para cambiar su estado.
+              Crea una tarea para una o varias personas, para un restaurante o para todo el grupo. Si la dejas sin asignar, quien la vea puede pulsar <strong className="font-medium text-grafito">Me la quedo</strong>. Arrastra las tarjetas para cambiar su estado.
             </p>
           </div>
         </div>
@@ -82,7 +82,7 @@ export default async function Tareas({ searchParams }: { searchParams: Promise<{
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-tinta text-[18px] leading-none text-crema transition group-open:rotate-45" aria-hidden="true">+</span>
               Nueva tarea
             </span>
-            <span className="text-[13px] font-normal text-niebla group-open:hidden">Responsable, restaurantes, prioridad y fecha son opcionales</span>
+            <span className="text-[13px] font-normal text-niebla group-open:hidden">Responsables, restaurantes, prioridad y fecha son opcionales</span>
           </summary>
           <div className="border-t border-linea px-6 pb-6 pt-5">
             <FormularioAccion action={crearTarea} boton="Crear tarea">

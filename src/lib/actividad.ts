@@ -33,7 +33,7 @@ const num = (v: unknown, max = 2) => new Intl.NumberFormat("es-ES", { maximumFra
 const s = (v: unknown) => (v === null || v === undefined ? "" : String(v));
 
 const CAMPOS: Record<string, string> = {
-  title: "título", description: "detalles", priority: "prioridad", due_date: "fecha límite", restaurant_ids: "restaurantes", position: "orden",
+  title: "título", description: "detalles", assignee_ids: "responsables", priority: "prioridad", due_date: "fecha límite", restaurant_ids: "restaurantes", position: "orden",
   name: "nombre", category: "categoría", base_unit: "unidad", yield_ratio: "rendimiento", density_g_per_ml: "densidad",
   unit_weight_g: "peso por unidad", unit_volume_ml: "volumen por unidad", allergens: "alérgenos", storage: "conservación", source: "fuente",
   nominal_power_w: "potencia", power_quality: "origen de la potencia", duty_factor: "factor de funcionamiento", preheat_minutes: "precalentamiento",
@@ -103,7 +103,7 @@ export async function cargarActividad(
     if (e.actor_id) personas.add(e.actor_id);
     const d = e.new_data ?? e.old_data;
     if (e.table_name === "memberships" && d?.user_id) personas.add(s(d.user_id));
-    if (e.table_name === "tasks" && d?.assignee_id) personas.add(s(d.assignee_id));
+    if (e.table_name === "tasks") for (const u of [...((e.new_data?.assignee_ids ?? []) as string[]), ...((e.old_data?.assignee_ids ?? []) as string[])]) personas.add(s(u));
     if (e.table_name === "ingredient_prices" && d?.ingredient_id) ingIds.add(s(d.ingredient_id));
     if (e.table_name === "recipe_versions" && d?.recipe_id) recIds.add(s(d.recipe_id));
   }
@@ -173,12 +173,22 @@ function describir(
       const tit = `«${s(n.title ?? o.title)}»`;
       const quien = (u: unknown) => (u ? ref.nombre.get(s(u)) ?? "alguien del equipo" : null);
       const ESTADO: Record<string, string> = { pending: "pendiente", in_progress: "en curso", review: "en revisión", done: "completada" };
-      if (e.action === "INSERT") return { texto: `creó la tarea ${tit}`, detalle: n.assignee_id ? `Para ${quien(n.assignee_id)}` : "Sin asignar", tipo: "crear" };
+      const lista = (x: unknown) => ((x ?? []) as string[]);
+      const nombres = (ids: string[]) => ids.map((u) => quien(u)).join(", ");
+      if (e.action === "INSERT") return { texto: `creó la tarea ${tit}`, detalle: lista(n.assignee_ids).length ? `Para ${nombres(lista(n.assignee_ids))}` : "Sin asignar", tipo: "crear" };
       if (e.action === "DELETE") return { texto: `borró la tarea ${tit}`, detalle: null, tipo: "archivar" };
-      if (o.assignee_id !== n.assignee_id) {
-        if (!n.assignee_id) return { texto: `soltó la tarea ${tit}`, detalle: "Queda sin asignar", tipo: "cambiar" };
-        if (n.assignee_id === e.actor_id && !o.assignee_id) return { texto: `se quedó la tarea ${tit}`, detalle: null, tipo: "cambiar" };
-        return { texto: `asignó la tarea ${tit} a ${quien(n.assignee_id)}`, detalle: o.status !== n.status ? `Ahora: ${ESTADO[s(n.status)]}` : null, tipo: "cambiar" };
+      const antes = lista(o.assignee_ids), ahora = lista(n.assignee_ids);
+      const entran = ahora.filter((u) => !antes.includes(u)), salen = antes.filter((u) => !ahora.includes(u));
+      if (entran.length || salen.length) {
+        const estado = o.status !== n.status ? `Ahora: ${ESTADO[s(n.status)]}` : null;
+        if (entran.length === 1 && !salen.length && entran[0] === e.actor_id) {
+          return { texto: antes.length ? `se apuntó a la tarea ${tit}` : `se quedó la tarea ${tit}`, detalle: estado, tipo: "cambiar" };
+        }
+        if (salen.length === 1 && !entran.length && salen[0] === e.actor_id) {
+          return { texto: `dejó la tarea ${tit}`, detalle: ahora.length ? `Siguen: ${nombres(ahora)}` : "Queda sin asignar", tipo: "cambiar" };
+        }
+        const partes = [entran.length ? `añadió a ${nombres(entran)}` : "", salen.length ? `quitó a ${nombres(salen)}` : ""].filter(Boolean);
+        return { texto: `cambió los responsables de la tarea ${tit}`, detalle: [partes.join(" y "), estado].filter(Boolean).join(" · "), tipo: "cambiar" };
       }
       if (o.status !== n.status) {
         if (n.status === "done") return { texto: `completó la tarea ${tit}`, detalle: null, tipo: "crear" };

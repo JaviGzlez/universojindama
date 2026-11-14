@@ -1,5 +1,5 @@
 import { Campo, Selector, claseInput } from "@/components/ui";
-import { NOMBRE_ESTADO, NOMBRE_PRIORIDAD, ESTADOS, PRIORIDADES, type Persona, type Tarea } from "@/lib/tareas";
+import { NOMBRE_ESTADO, NOMBRE_PRIORIDAD, ESTADOS, PRIORIDADES, iniciales, colorAvatar, type Persona, type Tarea } from "@/lib/tareas";
 
 export interface RestauranteEtiqueta { id: string; name: string; color: string }
 
@@ -14,23 +14,17 @@ export function CamposTarea({
   restauranteInicial?: string;
 }) {
   const marcados = tarea?.restaurant_ids ?? (restauranteInicial ? [restauranteInicial] : []);
+  const responsables = tarea?.assignee_ids ?? [];
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <Campo label="Qué hay que hacer" name="title" required maxLength={200} defaultValue={tarea?.title}
-          placeholder="Revisar alérgenos de la carta de otoño" className="md:col-span-4" />
-        <label className="block md:col-span-4">
+          placeholder="Revisar alérgenos de la carta de otoño" className="md:col-span-3" />
+        <label className="block md:col-span-3">
           <span className="mb-1.5 block text-[13px] font-medium text-grafito">Detalles <span className="font-normal text-niebla">(opcional)</span></span>
           <textarea name="description" rows={3} maxLength={4000} defaultValue={tarea?.description ?? ""}
             placeholder="Pasos, enlaces, qué se considera terminado…" className={`${claseInput} h-auto py-2.5 leading-relaxed`} />
         </label>
-        <Selector label="Responsable" name="assignee_id" defaultValue={tarea ? tarea.assignee_id ?? "" : ""}
-          ayuda="Sin asignar: cualquiera del equipo puede quedársela.">
-          <option value="">Sin asignar</option>
-          {personas.map((p) => (
-            <option key={p.user_id} value={p.user_id}>{p.display_name}{p.user_id === yo ? " (yo)" : ""}</option>
-          ))}
-        </Selector>
         <Selector label="Estado" name="status" defaultValue={tarea?.status ?? "pending"}>
           {ESTADOS.map((e) => <option key={e} value={e}>{NOMBRE_ESTADO[e]}</option>)}
         </Selector>
@@ -39,6 +33,22 @@ export function CamposTarea({
         </Selector>
         <Campo label="Fecha límite" name="due_date" type="date" defaultValue={tarea?.due_date ?? ""} />
       </div>
+      <fieldset className="mt-5">
+        <legend className="mb-2 text-[13px] font-medium text-grafito">
+          Responsables <span className="font-normal text-niebla">— marca una o varias personas; sin marcar, cualquiera puede quedársela</span>
+        </legend>
+        <div className="flex flex-wrap gap-2">
+          {personas.map((p) => (
+            <label key={p.user_id} className="cursor-pointer">
+              <input type="checkbox" name="assignee_ids" value={p.user_id} defaultChecked={responsables.includes(p.user_id)} className="peer sr-only" />
+              <span className="inline-flex h-9 items-center gap-2 rounded-full bg-crema-2 pl-1 pr-4 text-[14px] font-medium text-grafito transition peer-checked:bg-tinta peer-checked:text-crema peer-focus-visible:ring-2 peer-focus-visible:ring-tinta/40">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold" style={colorAvatar(p.user_id)} aria-hidden="true">{iniciales(p.display_name)}</span>
+                {p.display_name}{p.user_id === yo ? " (yo)" : ""}
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <fieldset className="mt-5">
         <legend className="mb-2 text-[13px] font-medium text-grafito">
           Restaurantes <span className="font-normal text-niebla">— ninguno marcado = todo el grupo</span>
