@@ -8,7 +8,7 @@ type Area = "recetas" | "materias" | "equipos" | "compras" | "inventario" | "car
 interface Item { nombre: string; ruta?: string; exacta?: boolean; area?: Area | Area[]; href?: string }
 
 const SECCIONES: { titulo: string; items: Item[]; soloPropietario?: boolean; neutra?: boolean }[] = [
-  { titulo: "Restaurante", items: [{ nombre: "Inicio", ruta: "", exacta: true }] },
+  { titulo: "Restaurante", items: [{ nombre: "Inicio", ruta: "", exacta: true }, { nombre: "Tareas del equipo", href: "/panel/tareas?r=:rid" }] },
   {
     titulo: "Cocina",
     items: [
@@ -97,7 +97,7 @@ export function Navegacion({ rid, color, puedeVer, propietario }: { rid: string;
                       </li>
                     );
                   }
-                  const href = it.href ?? base + it.ruta;
+                  const href = it.href ? it.href.replace(":rid", rid) : base + it.ruta;
                   const activo = it.href ? path === it.href : it.exacta ? path === href : path === href || path.startsWith(`${href}/`);
                   return (
                     <li key={it.nombre}>

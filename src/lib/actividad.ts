@@ -33,6 +33,7 @@ const num = (v: unknown, max = 2) => new Intl.NumberFormat("es-ES", { maximumFra
 const s = (v: unknown) => (v === null || v === undefined ? "" : String(v));
 
 const CAMPOS: Record<string, string> = {
+  title: "título", description: "detalles", priority: "prioridad", due_date: "fecha límite", restaurant_ids: "restaurantes", position: "orden",
   name: "nombre", category: "categoría", base_unit: "unidad", yield_ratio: "rendimiento", density_g_per_ml: "densidad",
   unit_weight_g: "peso por unidad", unit_volume_ml: "volumen por unidad", allergens: "alérgenos", storage: "conservación", source: "fuente",
   nominal_power_w: "potencia", power_quality: "origen de la potencia", duty_factor: "factor de funcionamiento", preheat_minutes: "precalentamiento",
@@ -43,7 +44,7 @@ const CAMPOS: Record<string, string> = {
   price_policy: "política de precios", money_decimals: "decimales", opening_hours: "horario", targets: "objetivos", alert_thresholds: "avisos",
   timezone: "zona horaria", currency: "moneda", notes: "notas", status: "estado",
 };
-const IGNORAR = new Set(["updated_at", "version", "created_at", "cost_per_hour", "organization_id", "restaurant_id", "id"]);
+const IGNORAR = new Set(["updated_at", "version", "created_at", "cost_per_hour", "organization_id", "restaurant_id", "id", "completed_at", "completed_by"]);
 
 function cambios(o: Datos, n: Datos) {
   if (!o || !n) return [];
@@ -68,7 +69,7 @@ export const TABLAS_ACTIVIDAD = [
   ...["ingredients", "equipment", "labor_profiles", "energy_tariffs", "tax_rates", "consumables", "suppliers", "supplier_products", "sales_channels", "menu_items"],
   "ingredient_prices", "restaurant_settings", "restaurants", "memberships", "profiles",
   "recipes", "recipe_versions", "purchase_invoices", "channel_prices", "sales", "stock_movements", "stock_counts",
-  "financial_entries", "financial_periods", "import_jobs",
+  "financial_entries", "financial_periods", "import_jobs", "tasks",
 ];
 
 const REF_UNIDAD: Record<string, { f: number; u: string }> = { g: { f: 1000, u: "kg" }, ml: { f: 1000, u: "l" }, unit: { f: 1, u: "ud" } };
@@ -102,6 +103,7 @@ export async function cargarActividad(
     if (e.actor_id) personas.add(e.actor_id);
     const d = e.new_data ?? e.old_data;
     if (e.table_name === "memberships" && d?.user_id) personas.add(s(d.user_id));
+    if (e.table_name === "tasks" && d?.assignee_id) personas.add(s(d.assignee_id));
     if (e.table_name === "ingredient_prices" && d?.ingredient_id) ingIds.add(s(d.ingredient_id));
     if (e.table_name === "recipe_versions" && d?.recipe_id) recIds.add(s(d.recipe_id));
   }
@@ -167,6 +169,24 @@ function describir(
   }
 
   switch (e.table_name) {
+    case "tasks": {
+      const tit = `«${s(n.title ?? o.title)}»`;
+      const quien = (u: unknown) => (u ? ref.nombre.get(s(u)) ?? "alguien del equipo" : null);
+      const ESTADO: Record<string, string> = { pending: "pendiente", in_progress: "en curso", review: "en revisión", done: "completada" };
+      if (e.action === "INSERT") return { texto: `creó la tarea ${tit}`, detalle: n.assignee_id ? `Para ${quien(n.assignee_id)}` : "Sin asignar", tipo: "crear" };
+      if (e.action === "DELETE") return { texto: `borró la tarea ${tit}`, detalle: null, tipo: "archivar" };
+      if (o.assignee_id !== n.assignee_id) {
+        if (!n.assignee_id) return { texto: `soltó la tarea ${tit}`, detalle: "Queda sin asignar", tipo: "cambiar" };
+        if (n.assignee_id === e.actor_id && !o.assignee_id) return { texto: `se quedó la tarea ${tit}`, detalle: null, tipo: "cambiar" };
+        return { texto: `asignó la tarea ${tit} a ${quien(n.assignee_id)}`, detalle: o.status !== n.status ? `Ahora: ${ESTADO[s(n.status)]}` : null, tipo: "cambiar" };
+      }
+      if (o.status !== n.status) {
+        if (n.status === "done") return { texto: `completó la tarea ${tit}`, detalle: null, tipo: "crear" };
+        return { texto: `pasó la tarea ${tit} a ${ESTADO[s(n.status)]}`, detalle: null, tipo: "cambiar" };
+      }
+      const c = cambios(o, n);
+      return c.length ? { texto: `modificó la tarea ${tit}`, detalle: `Cambió: ${c.join(", ")}`, tipo: "cambiar" } : null;
+    }
     case "ingredient_prices": {
       const i = ref.ing.get(s(n.ingredient_id));
       const u = REF_UNIDAD[i?.base_unit ?? "unit"];

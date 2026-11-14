@@ -22,3 +22,6 @@ export function mundoDeSlug(slug: string): MundoId {
   if (slug.startsWith("juye")) return "juye";
   return "jindama";
 }
+
+/** Color de cada universo con contraste suficiente sobre blanco (menús, etiquetas). */
+export const COLOR_MUNDO: Record<MundoId, string> = { jindama: "#4f6b4a", jaleo: "#b0532f", juye: "#8a5a1c" };

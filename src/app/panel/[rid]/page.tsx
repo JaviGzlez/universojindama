@@ -30,6 +30,11 @@ export default async function Inicio({ params }: { params: Promise<{ rid: string
     sb.from("recipes").select("id", { count: "exact", head: true }).eq("restaurant_id", rid).eq("status", "active"),
     sb.from("menu_items").select("id", { count: "exact", head: true }).eq("restaurant_id", rid).eq("status", "active"),
   ]);
+  const { data: tareasAbiertas } = await sb.from("tasks").select("id, title, assignee_id, due_date, priority, restaurant_ids")
+    .eq("organization_id", restaurante.organization_id).neq("status", "done")
+    .or(`restaurant_ids.cs.{${rid}},restaurant_ids.eq.{}`).limit(200);
+  const mias = (tareasAbiertas ?? []).filter((t) => t.assignee_id === ctx.user.id);
+  const libres = (tareasAbiertas ?? []).filter((t) => !t.assignee_id);
   const conPrecio = ings.filter((i) => i.precio).length;
   const base = `/panel/${rid}`;
   const mundo = mundoDeSlug(restaurante.slug);
@@ -70,6 +75,20 @@ export default async function Inicio({ params }: { params: Promise<{ rid: string
             </div>
           ))}
         </section>
+      )}
+
+      {(mias.length > 0 || libres.length > 0) && (
+        <Link href={`/panel/tareas?r=${rid}`} className="group mt-8 flex flex-col gap-3 rounded-[22px] bg-white p-5 ring-1 ring-linea transition hover:bg-crema-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[16px] font-semibold">Tareas</p>
+            <p className="mt-0.5 text-[13px] text-niebla">
+              {mias.length > 0 ? `${mias.length} ${mias.length === 1 ? "asignada" : "asignadas"} a ti` : "Ninguna asignada a ti"}
+              {libres.length > 0 && ` · ${libres.length} sin asignar que puedes quedarte`}
+            </p>
+            {mias[0] && <p className="mt-1.5 truncate text-[14px] text-grafito">Siguiente: <strong className="font-medium">{mias[0].title}</strong></p>}
+          </div>
+          <span className="text-[14px] font-medium text-tinta">Ver tablero <span aria-hidden="true" className="inline-block transition group-hover:translate-x-1">→</span></span>
+        </Link>
       )}
 
       {ctx.puedeVer(restaurante, "economia") && (

@@ -107,6 +107,8 @@ export const getContexto = cache(async () => {
     puede,
     puedeVer,
     esPropietario: (orgId: string) => memb.some((m) => m.organization_id === orgId && m.role === "owner"),
+    /** Propietario o administrador de todo el grupo (igual que has_org_role(org, admin)). */
+    esAdminGrupo: (orgId: string) => memb.some((m) => m.organization_id === orgId && (m.role === "owner" || (m.role === "admin" && m.restaurant_id === null))),
   };
 });
 

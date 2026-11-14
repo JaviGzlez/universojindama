@@ -1,10 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { salir } from "@/app/acceso/actions";
-import { Marca } from "@/components/marca";
 import { mundoDeSlug } from "@/components/mundo";
 import { getContexto } from "@/lib/contexto";
 import { resumenPorRestaurante } from "@/lib/economia";
+import { CabeceraGrupo } from "./cabecera-grupo";
 import { Universo, type RestauranteUniverso } from "./universo";
 
 export const metadata = { title: "Universo" };
@@ -41,23 +39,10 @@ export default async function PanelGrupo() {
     recetas: cuenta(recetas, r.id),
     avisos: cuenta(avisos, r.id),
   }));
-  const propietario = ctx.esPropietario(ctx.restaurants[0].organization_id);
 
   return (
     <div className="min-h-screen bg-crema">
-      <header className="sticky top-0 z-40 border-b border-linea/60 bg-crema/75 backdrop-blur-xl">
-        <nav className="mx-auto flex h-14 max-w-6xl items-center justify-between px-5 md:px-8" aria-label="Universo">
-          <Marca href="/panel" />
-          <div className="flex items-center gap-1 text-[13px]">
-            {propietario && (
-              <Link href="/panel/administracion" className="rounded-full px-3 py-1.5 font-medium text-tinta hover:bg-tinta/5">Administración</Link>
-            )}
-            <form action={salir}>
-              <button className="rounded-full px-3 py-1.5 text-grafito hover:bg-tinta/5">Salir</button>
-            </form>
-          </div>
-        </nav>
-      </header>
+      <CabeceraGrupo ctx={ctx} activo="universo" />
 
       <main className="mx-auto max-w-6xl px-5 pb-24 pt-12 md:px-8 md:pt-16">
         <div className="text-center">

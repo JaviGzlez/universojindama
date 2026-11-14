@@ -7,6 +7,7 @@ Plataforma de costes y escandallos para restaurantes: cada local introduce sus d
 - **Universo:** portada de grupo con los tres mundos en movimiento; al tocar uno (o el grupo) se ven sus gráficas animadas de ingresos, resultado, compras, personal y gastos, KPIs y comparativa, Doble clic en un restaurante (o el botón «Entrar en…») abre su panel.
 - **Acceso:** usuario y contraseña sin correo; el propietario crea las cuentas en **Administración**, elige a qué restaurantes accede cada persona y marca por áreas (recetas, compras y facturas, inventario, carta, ventas, economía…) si no ve, solo ve o edita. El **registro de actividad** con cada movimiento solo lo ve el propietario.
 - **Recetas y elaboraciones:** composición y coste, proceso paso a paso (tiempos, temperatura, equipo, puntos críticos), conservación, vida útil, presentación, alérgenos derivados y ficha técnica imprimible. *Dónde se usa* conecta elaboraciones, platos y carta.
+- **Tareas:** tablero Pendiente → En curso → En revisión → Completada. Cada tarea puede tener responsable, restaurantes, prioridad, fecha límite y comentarios. Las que no tienen responsable las coge quien pulse «Me la quedo». Cada persona ve las de todo el grupo y las de sus restaurantes.
 - **Materias primas conectadas:** cada una tiene su ficha con evolución del precio, proveedores, últimas compras, recetas que la usan, existencias y mermas. Equipos y consumibles muestran coste por hora y en qué recetas se usan.
 - **Cocina:** materias primas con histórico de precios, equipos, personal, tarifas, impuestos y consumibles; **recetas y elaboraciones** con versiones (borrador → activa → sustituida), elaboraciones dentro de recetas sin duplicar costes, bloqueo de referencias circulares, **histórico de costes** que nunca se reescribe y escandallo rápido.
 - **Compras:** proveedores, productos de proveedor (formato y marca) y **facturas** borrador → validada → registrada; el registro es transaccional e idempotente, aplica precios e inventario y **recalcula las recetas afectadas** con avisos si el coste cambia más del umbral.
@@ -49,8 +50,9 @@ git push -u origin main
    8. `supabase/migrations/20261104000008_economia.sql`
    9. `supabase/migrations/20261110000009_permisos.sql` (permisos por áreas; actividad solo para el propietario)
    10. `supabase/migrations/20261110000010_recetas_ficha.sql` (pasos de elaboración, tiempos, conservación)
+   11. `supabase/migrations/20261114000011_tareas.sql` (tareas del equipo)
 
-   Atajos para un proyecto ya creado: `supabase/actualizar-fases-2-a-5.sql` (migraciones 5–8) y `supabase/actualizar-permisos-y-fichas.sql` (9–10).
+   Atajos para un proyecto ya creado: `supabase/actualizar-fases-2-a-5.sql` (migraciones 5–8), `supabase/actualizar-permisos-y-fichas.sql` (9–10) y `supabase/actualizar-tareas.sql` (11).
 
    Todas a partir de la 4 se pueden volver a ejecutar sin problema.
 
@@ -128,6 +130,7 @@ src/app/panel/page.tsx    Universo: portada de grupo con gráficas
 src/app/panel/[rid]/      Panel por restaurante: inicio, actividad, recetas, escandallo,
                           materias primas, equipos, compras, inventario, carta, ventas,
                           economía (resultados, movimientos, importar Excel), ajustes
+src/app/panel/tareas/          Tablero de tareas del equipo
 src/app/panel/administracion/  Equipo, permisos por áreas y registro de actividad (propietario)
 src/lib/importar/         Lector del Excel de analítica (puro, probado)
 src/app/api/v1/           API REST

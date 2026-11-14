@@ -1,10 +1,9 @@
 import Link from "next/link";
+import { CabeceraGrupo } from "../cabecera-grupo";
 import { redirect } from "next/navigation";
-import { salir } from "@/app/acceso/actions";
 import { Avatar } from "@/components/avatar";
 import { AccionRapida, FormularioAccion } from "@/components/formulario-accion";
 import { ListaActividad } from "@/components/lista-actividad";
-import { Marca } from "@/components/marca";
 import { Campo, Insignia, Tarjeta, Vacio } from "@/components/ui";
 import { cargarActividad } from "@/lib/actividad";
 import { AREAS, getContexto, NOMBRE_AREA, NOMBRE_ROL, type Area, type Nivel, type Rol } from "@/lib/contexto";
@@ -37,15 +36,7 @@ export default async function Administracion({ searchParams }: { searchParams: P
 
   return (
     <div className="min-h-screen bg-crema">
-      <header className="sticky top-0 z-40 border-b border-linea/60 bg-crema/75 backdrop-blur-xl">
-        <nav className="mx-auto flex h-14 max-w-6xl items-center justify-between px-5 md:px-8" aria-label="Administración">
-          <Marca href="/panel" />
-          <div className="flex items-center gap-1 text-[13px]">
-            <Link href="/panel" className="rounded-full px-3 py-1.5 text-grafito hover:bg-tinta/5">Universo</Link>
-            <form action={salir}><button className="rounded-full px-3 py-1.5 text-grafito hover:bg-tinta/5">Salir</button></form>
-          </div>
-        </nav>
-      </header>
+      <CabeceraGrupo ctx={ctx} activo="administracion" />
       <main className="mx-auto max-w-6xl px-5 pb-24 pt-10 md:px-8">
         <p className="text-[13px] font-medium uppercase tracking-[0.14em] text-niebla">Solo propietario</p>
         <h1 className="mt-1 text-[40px] font-semibold tracking-[-0.03em] md:text-[48px]">Administración</h1>
